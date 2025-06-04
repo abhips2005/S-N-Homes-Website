@@ -15,6 +15,7 @@ import EditProperty from './pages/EditProperty';
 import SavedProperties from './pages/SavedProperties';
 import History from './pages/History';
 import Notifications from './pages/Notifications';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminLogin from './pages/AdminLogin';
@@ -51,6 +52,7 @@ function App() {
                   <Route path="/saved" element={<SavedProperties />} />
                   <Route path="/history" element={<History />} />
                   <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/settings" element={<Settings />} />
                 </Route>
 
                 {/* Admin Routes */}

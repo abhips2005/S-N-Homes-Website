@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Home as HomeIcon, Building2, Map, Phone, Sparkles, Shield, IndianRupee } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useInView } from 'react-intersection-observer';
 import AIRecommendationButton from '../components/AIRecommendationButton';
 import LocationAutocomplete from '../components/LocationAutocomplete';
+import { PropertyService } from '../services/propertyService';
+import type { Property } from '../types';
 
 function Home() {
   const navigate = useNavigate();
@@ -18,6 +20,26 @@ function Home() {
     type: '',
     priceRange: '',
   });
+
+  const [availableProperties, setAvailableProperties] = useState<Property[]>([]);
+
+  // Load available properties for AI recommendations
+  useEffect(() => {
+    const loadProperties = async () => {
+      try {
+        console.log('Loading properties for Home page AI recommendations...');
+        const properties = await PropertyService.getAllAvailableProperties(50); // Get 50 properties for better recommendations
+        console.log('Properties loaded successfully for Home page:', properties.length);
+        setAvailableProperties(properties);
+      } catch (error) {
+        console.error('Error loading properties for Home page:', error);
+        // Don't show error to user, just log it
+        setAvailableProperties([]);
+      }
+    };
+
+    loadProperties();
+  }, []);
 
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
@@ -53,58 +75,6 @@ function Home() {
     });
     navigate(`/properties?${params.toString()}`);
   };
-
-  // Mock properties for AI recommendations
-  const mockProperties = [
-    {
-      id: 'prop1',
-      title: 'Luxury Villa in Kochi',
-      type: 'residential',
-      location: 'Kochi',
-      district: 'Ernakulam',
-      bedrooms: 4,
-      bathrooms: 3,
-      area: 2500,
-      landArea: 10,
-      landAreaUnit: 'cent',
-      price: 15000000,
-      images: ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'],
-      features: [],
-      amenities: [],
-      user_id: '',
-      created_at: '',
-      is_premium: false,
-      status: 'available',
-      furnished: false,
-      views: 0,
-      coordinates: { latitude: 0, longitude: 0 },
-      nearbyPlaces: []
-    },
-    {
-      id: 'prop2',
-      title: 'Modern Apartment in Trivandrum',
-      type: 'flat',
-      location: 'Trivandrum',
-      district: 'Thiruvananthapuram',
-      bedrooms: 3,
-      bathrooms: 2,
-      area: 1800,
-      landArea: 0,
-      landAreaUnit: 'cent',
-      price: 8500000,
-      images: ['https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'],
-      features: [],
-      amenities: [],
-      user_id: '',
-      created_at: '',
-      is_premium: false,
-      status: 'available',
-      furnished: false,
-      views: 0,
-      coordinates: { latitude: 0, longitude: 0 },
-      nearbyPlaces: []
-    }
-  ];
 
   return (
     <div className="flex flex-col">
@@ -322,7 +292,7 @@ function Home() {
         </div>
       </div>
 
-      <AIRecommendationButton properties={mockProperties} />
+      <AIRecommendationButton properties={availableProperties} />
     </div>
   );
 }

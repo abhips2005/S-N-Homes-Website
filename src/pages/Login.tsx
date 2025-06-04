@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, EyeOff, Eye, Phone } from 'lucide-react';
+import { Mail, Lock, EyeOff, Eye, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -10,53 +10,54 @@ import {
   signInWithPopup 
 } from 'firebase/auth';
 import { auth } from '../firebase-config';
+import { UserService } from '../services/userService';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user, refreshUserProfile, loading } = useAuth();
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
+  
+  // Phone collection modal for existing users
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phone, setPhone] = useState('');
+
+  // Handle navigation and phone modal based on user state
+  useEffect(() => {
+    if (!loading && user && justLoggedIn) {
+      if (!user.phone || user.phone.trim() === '') {
+        // User needs to provide phone number
+        setShowPhoneModal(true);
+        setJustLoggedIn(false);
+      } else {
+        // User has phone number, redirect to dashboard
+        navigate('/dashboard');
+        setJustLoggedIn(false);
+      }
+    }
+  }, [user, loading, justLoggedIn, navigate]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!phone || phone.trim().length < 10) {
-      toast.error('Valid mobile number is required');
-      return;
-    }
-    
     setIsLoading(true);
 
     try {
       // Real Firebase authentication
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      await signInWithEmailAndPassword(auth, email, password);
       
-      // Create user data from Firebase user
-      const userData = {
-        id: user.uid,
-        name: user.displayName || email.split('@')[0],
-        email: user.email || '',
-        phone: phone,
-        phoneVerified: false,
-        role: 'user' as const,
-        created_at: user.metadata.creationTime || new Date().toISOString(),
-        verified: user.emailVerified,
-        savedProperties: [],
-        viewingHistory: []
-      };
-      
-      // Update auth context
-      login(userData);
+      // The AuthContext will handle loading the user profile from Firestore
+      // Set flag to indicate we just logged in
+      setJustLoggedIn(true);
       toast.success('Login successful!');
-      navigate('/dashboard');
     } catch (error: any) {
       console.error('Login error:', error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        toast.error('Invalid email or password');
+      } else if (error.code === 'auth/invalid-credential') {
         toast.error('Invalid email or password');
       } else {
         toast.error(error.message || 'Failed to login');
@@ -67,36 +68,17 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
-    if (!phone || phone.trim().length < 10) {
-      toast.error('Please enter your mobile number before continuing with Google');
-      return;
-    }
-    
     try {
       setIsGoogleLoading(true);
       
       // Real Google authentication
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      await signInWithPopup(auth, provider);
       
-      // Create user data from Google user
-      const userData = {
-        id: user.uid,
-        name: user.displayName || 'User',
-        email: user.email || '',
-        phone: phone,
-        phoneVerified: false,
-        role: 'user' as const,
-        created_at: user.metadata.creationTime || new Date().toISOString(),
-        verified: true,
-        savedProperties: [],
-        viewingHistory: []
-      };
-
-      login(userData);
+      // The AuthContext will handle the rest via onAuthStateChanged
+      // Set flag to indicate we just logged in
+      setJustLoggedIn(true);
       toast.success('Google login successful!');
-      navigate('/dashboard');
     } catch (error: any) {
       console.error('Google login error:', error);
       if (error.code === 'auth/popup-closed-by-user') {
@@ -106,6 +88,38 @@ const Login: React.FC = () => {
       }
     } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!phone || phone.trim().length < 10) {
+      toast.error('Valid mobile number is required');
+      return;
+    }
+    
+    if (!user) return;
+
+    try {
+      setIsLoading(true);
+      
+      // Update user profile with phone number
+      await UserService.updateUserProfile(user.id, { phone: phone.trim() });
+      
+      // Refresh user profile in context
+      await refreshUserProfile();
+      
+      setShowPhoneModal(false);
+      toast.success('Phone number updated successfully!');
+      
+      // Redirect to dashboard after successful phone number collection
+      navigate('/dashboard');
+    } catch (error: any) {
+      console.error('Error updating phone number:', error);
+      toast.error('Failed to update phone number. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -143,24 +157,6 @@ const Login: React.FC = () => {
               </div>
               
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mobile Number
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Enter your mobile number"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div>
                 <div className="flex justify-between items-center mb-1">
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                     Password
@@ -189,6 +185,7 @@ const Login: React.FC = () => {
                   </button>
                 </div>
               </div>
+              
               <button
                 type="submit"
                 disabled={isLoading}
@@ -241,6 +238,73 @@ const Login: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Phone Number Modal for Existing Users */}
+      <AnimatePresence>
+        {showPhoneModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Complete Your Profile</h2>
+                <button 
+                  onClick={() => setShowPhoneModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handlePhoneSubmit} className="p-6 space-y-4">
+                <div>
+                  <p className="text-gray-600 mb-4">
+                    To complete your profile and access all features, please provide your mobile number.
+                  </p>
+                  
+                  <label htmlFor="userPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                    Mobile Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      id="userPhone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Enter your mobile number"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center"
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      'Complete Profile'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

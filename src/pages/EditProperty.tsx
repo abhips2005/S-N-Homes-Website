@@ -3,97 +3,18 @@ import { motion } from 'framer-motion';
 import { Upload, Plus, Minus, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { PropertyService } from '../services/propertyService';
 import toast from 'react-hot-toast';
 import type { Property } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import LocationAutocomplete from '../components/LocationAutocomplete';
-
-// Mock property data - in a real app, this would come from an API
-const mockProperties = [
-  {
-    id: 'KE-123456-789',
-    title: 'Luxury Villa in Kochi',
-    description: 'Beautiful 4BHK villa with modern amenities and stunning views.',
-    price: 15000000,
-    type: 'residential' as const,
-    location: 'Kochi',
-    district: 'Ernakulam',
-    bedrooms: 4,
-    bathrooms: 3,
-    area: 2500,
-    landArea: 10,
-    landAreaUnit: 'cent' as const,
-    images: [
-      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
-    ],
-    features: ['Swimming Pool', 'Garden', 'Security'],
-    user_id: 'user1',
-    created_at: '2024-03-10',
-    is_premium: true,
-    status: 'available' as const,
-    virtual_tour_url: 'https://pannellum.org/images/cerro-toco-0.jpg',
-    amenities: ['Pool', 'Garden', 'Security', 'Gym', 'Parking', 'Power Backup'],
-    nearbyPlaces: [
-      { name: 'City Mall', type: 'shopping' as const, distance: 1.5 },
-      { name: 'International School', type: 'school' as const, distance: 2 },
-      { name: 'Metro Station', type: 'transport' as const, distance: 0.5 }
-    ],
-    energyRating: 'A',
-    constructionYear: 2022,
-    lastRenovated: '2023',
-    parkingSpaces: 2,
-    furnished: true,
-    views: 150,
-    coordinates: {
-      latitude: 9.9312,
-      longitude: 76.2673
-    }
-  },
-  {
-    id: 'KE-654321-987',
-    title: 'Modern Apartment in Trivandrum',
-    description: 'Spacious 3BHK apartment with great amenities.',
-    price: 8500000,
-    type: 'flat' as const,
-    location: 'Trivandrum',
-    district: 'Thiruvananthapuram',
-    bedrooms: 3,
-    bathrooms: 2,
-    area: 1800,
-    landArea: 0,
-    landAreaUnit: 'cent' as const,
-    images: [
-      'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
-    ],
-    features: ['Gym', 'Parking', 'Security'],
-    user_id: 'user1',
-    created_at: '2024-02-15',
-    is_premium: false,
-    status: 'available' as const,
-    virtual_tour_url: '',
-    amenities: ['Gym', 'Parking', 'Security', 'Power Backup'],
-    nearbyPlaces: [
-      { name: 'Shopping Mall', type: 'shopping' as const, distance: 1.0 },
-      { name: 'School', type: 'school' as const, distance: 1.5 },
-      { name: 'Hospital', type: 'hospital' as const, distance: 2.0 }
-    ],
-    energyRating: 'B',
-    constructionYear: 2020,
-    lastRenovated: '',
-    parkingSpaces: 1,
-    furnished: true,
-    views: 85,
-    coordinates: {
-      latitude: 8.5241,
-      longitude: 76.9366
-    }
-  }
-];
+import LoadingSpinner from '../components/LoadingSpinner';
 
 function EditProperty() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
@@ -139,19 +60,47 @@ function EditProperty() {
   
   // Load property data
   useEffect(() => {
-    if (id) {
-      // In a real app, this would be an API call to fetch property details
-      const propertyData = mockProperties.find(p => p.id === id);
+    if (id && user) {
+      loadPropertyData();
+    }
+  }, [id, user]);
+
+  const loadPropertyData = async () => {
+    if (!id) {
+      toast.error('Property ID not found');
+      navigate('/dashboard?tab=listings');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('Loading property data for editing:', id);
+      
+      const propertyData = await PropertyService.getPropertyById(id);
       
       if (propertyData) {
+        // Verify user owns this property
+        if (propertyData.user_id !== user?.id) {
+          toast.error('You can only edit your own properties');
+          navigate('/dashboard?tab=listings');
+          return;
+        }
+        
+        console.log('Property data loaded successfully:', propertyData);
         setProperty(propertyData);
-        setImagePreviewUrls(propertyData.images);
+        setImagePreviewUrls(propertyData.images || []);
       } else {
         toast.error('Property not found');
         navigate('/dashboard?tab=listings');
       }
+    } catch (error) {
+      console.error('Error loading property:', error);
+      toast.error('Failed to load property details');
+      navigate('/dashboard?tab=listings');
+    } finally {
+      setLoading(false);
     }
-  }, [id, navigate]);
+  };
 
   // Add new location handler for OSM component
   const handleLocationChange = (location: string) => {
@@ -168,12 +117,49 @@ function EditProperty() {
       return;
     }
 
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    if (!id) {
+      toast.error('Property ID not found');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // In a real app, this would update the property in the database
-      console.log('Updated property:', property);
+      console.log('Updating property:', id);
+      console.log('Property data:', property);
       
+      // Prepare update data
+      const updateData: Partial<Property> = {
+        title: property.title,
+        description: property.description,
+        price: Number(property.price),
+        type: property.type,
+        location: property.location,
+        district: property.district,
+        bedrooms: Number(property.bedrooms),
+        bathrooms: Number(property.bathrooms),
+        area: Number(property.area),
+        landArea: Number(property.landArea) || 0,
+        landAreaUnit: property.landAreaUnit || 'cent',
+        amenities: property.amenities || [],
+        features: property.features || [],
+        furnished: property.furnished || false,
+        parkingSpaces: Number(property.parkingSpaces) || 0,
+        constructionYear: Number(property.constructionYear),
+        energyRating: property.energyRating || 'B',
+        virtual_tour_url: property.virtual_tour_url || '',
+        is_premium: property.is_premium || false
+      };
+
+      // Update property in Firebase
+      await PropertyService.updateProperty(id, updateData, images);
+      
+      console.log('Property updated successfully');
       toast.success('Property updated successfully!');
       navigate('/dashboard?tab=listings');
     } catch (error) {
@@ -198,11 +184,7 @@ function EditProperty() {
 
   const removeImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviewUrls(prev => {
-      // Revoke the URL to prevent memory leaks
-      URL.revokeObjectURL(prev[index]);
-      return prev.filter((_, i) => i !== index);
-    });
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const addAmenity = () => {
@@ -245,21 +227,24 @@ function EditProperty() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 pt-24 pb-12">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-            <h2 className="text-xl font-semibold mb-4">Please Login</h2>
-            <p className="text-gray-600 mb-6">
-              You need to be logged in to edit a property.
-            </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
-            >
-              Login
-            </button>
-          </div>
+      <div className="min-h-screen bg-gray-50 pt-20 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+          <p className="text-gray-500 mb-4">Please login to edit properties</p>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+          >
+            Login
+          </button>
         </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-20 flex items-center justify-center">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }

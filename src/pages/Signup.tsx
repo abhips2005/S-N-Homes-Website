@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Lock, EyeOff, Eye, Phone } from 'lucide-react';
+import { User, Mail, Lock, EyeOff, Eye, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
   createUserWithEmailAndPassword,
@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase-config';
 import { useAuth } from '../contexts/AuthContext';
+import { UserService } from '../services/userService';
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +25,11 @@ const Signup: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  
+  // Google signup modal states
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [googleUserData, setGoogleUserData] = useState<any>(null);
+  const [googlePhone, setGooglePhone] = useState('');
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +53,15 @@ const Signup: React.FC = () => {
       
       // Update profile with display name
       await updateProfile(user, { displayName: fullName });
+      
+      // Create user profile in Firestore
+      await UserService.createUserProfile(user.uid, {
+        name: fullName,
+        email: user.email || '',
+        phone: phone,
+        phoneVerified: false,
+        role: 'user'
+      });
       
       // Create user data for context
       const userData = {
@@ -80,11 +95,6 @@ const Signup: React.FC = () => {
   };
 
   const handleGoogleSignup = async () => {
-    if (!phone || phone.trim().length < 10) {
-      toast.error('Please enter your mobile number before continuing with Google');
-      return;
-    }
-    
     try {
       setIsGoogleLoading(true);
       
@@ -93,23 +103,10 @@ const Signup: React.FC = () => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       
-      // Create user data for context
-      const userData = {
-        id: user.uid,
-        name: user.displayName || 'User',
-        email: user.email || '',
-        phone: phone,
-        phoneVerified: false,
-        role: 'user' as const,
-        created_at: user.metadata.creationTime || new Date().toISOString(),
-        verified: true,
-        savedProperties: [],
-        viewingHistory: []
-      };
-      
-      login(userData);
-      toast.success('Account created with Google!');
-      navigate('/dashboard');
+      // Store Google user data and show phone modal
+      setGoogleUserData(user);
+      setShowPhoneModal(true);
+      setIsGoogleLoading(false);
     } catch (error: any) {
       console.error('Google signup error:', error);
       if (error.code === 'auth/popup-closed-by-user') {
@@ -117,8 +114,55 @@ const Signup: React.FC = () => {
       } else {
         toast.error(error.message || 'Failed to signup with Google');
       }
-    } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  const handleCompleteGoogleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!googlePhone || googlePhone.trim().length < 10) {
+      toast.error('Valid mobile number is required');
+      return;
+    }
+    
+    if (!googleUserData) return;
+
+    try {
+      setIsLoading(true);
+      
+      // Create user profile in Firestore  
+      await UserService.createUserProfile(googleUserData.uid, {
+        name: googleUserData.displayName || 'User',
+        email: googleUserData.email || '',
+        phone: googlePhone,
+        phoneVerified: false,
+        role: 'user'
+      });
+      
+      // Create user data for context
+      const userData = {
+        id: googleUserData.uid,
+        name: googleUserData.displayName || 'User',
+        email: googleUserData.email || '',
+        phone: googlePhone,
+        phoneVerified: false,
+        role: 'user' as const,
+        created_at: googleUserData.metadata.creationTime || new Date().toISOString(),
+        verified: true,
+        savedProperties: [],
+        viewingHistory: []
+      };
+      
+      login(userData);
+      setShowPhoneModal(false);
+      toast.success('Account created with Google!');
+      navigate('/dashboard');
+    } catch (error: any) {
+      console.error('Error completing Google signup:', error);
+      toast.error('Failed to complete signup. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -287,6 +331,71 @@ const Signup: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Phone Number Modal for Google Signup */}
+      <AnimatePresence>
+        {showPhoneModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Complete Your Signup</h2>
+                <button 
+                  onClick={() => setShowPhoneModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCompleteGoogleSignup} className="p-6 space-y-4">
+                <div>
+                  <p className="text-gray-600 mb-4">
+                    To complete your signup with Google, please provide your mobile number.
+                  </p>
+                  
+                  <label htmlFor="googlePhone" className="block text-sm font-medium text-gray-700 mb-1">
+                    Mobile Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      id="googlePhone"
+                      type="tel"
+                      value={googlePhone}
+                      onChange={(e) => setGooglePhone(e.target.value)}
+                      placeholder="Enter your mobile number"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center"
+                >
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Complete Signup'
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

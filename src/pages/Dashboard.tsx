@@ -17,6 +17,7 @@ const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'overview');
   const [userListingsCount, setUserListingsCount] = useState(0);
   const [recentProperties, setRecentProperties] = useState<Property[]>([]);
+  const [allAvailableProperties, setAllAvailableProperties] = useState<Property[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [viewedProperties, setViewedProperties] = useState<Property[]>([]);
 
@@ -72,6 +73,12 @@ const Dashboard: React.FC = () => {
       console.log('Recent properties loaded successfully:', recentProps.length);
       setRecentProperties(recentProps);
       
+      // Load all available properties for AI recommendations
+      console.log('Loading all available properties for recommendations...');
+      const allProps = await PropertyService.getAllAvailableProperties(100); // Get more properties for better recommendations
+      console.log('All available properties loaded successfully:', allProps.length);
+      setAllAvailableProperties(allProps);
+      
       // Load recently viewed properties from user's viewing history
       if (user.viewingHistory && user.viewingHistory.length > 0) {
         console.log('Loading viewed properties from history...');
@@ -97,6 +104,7 @@ const Dashboard: React.FC = () => {
       console.log('Dashboard data loaded successfully:', {
         userListingsCount: userProperties.length,
         recentProperties: recentProps.length,
+        allAvailableProperties: allProps.length,
         viewedProperties: user.viewingHistory?.length || 0
       });
     } catch (error) {
@@ -362,7 +370,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* AI Recommendation Button */}
-      <AIRecommendationButton properties={recentProperties} />
+      <AIRecommendationButton properties={allAvailableProperties} />
     </div>
   );
 };

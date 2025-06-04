@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Pannellum from 'react-pannellum';
-import { MapPin, Bed, Bath, Square, IndianRupee, Calendar, Phone, Mail, Heart, Share2, Eye, MessageCircle, DollarSign, X } from 'lucide-react';
+import { MapPin, Bed, Bath, Square, IndianRupee, Calendar, Phone, Mail, Heart, Share2, Eye, MessageCircle, DollarSign, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PropertyService } from '../services/propertyService';
 import { UserService } from '../services/userService';
@@ -64,6 +64,34 @@ function PropertyDetails() {
       setProperty(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveProperty = async () => {
+    if (!user) {
+      toast.error('Please login to save properties');
+      navigate('/login');
+      return;
+    }
+
+    if (!property) return;
+
+    try {
+      const isSaved = user.savedProperties?.includes(property.id) || false;
+      
+      if (isSaved) {
+        await UserService.removeSavedProperty(user.id, property.id);
+        toast.success('Property removed from saved');
+      } else {
+        await UserService.addSavedProperty(user.id, property.id);
+        toast.success('Property saved successfully');
+      }
+      
+      // Refresh user profile to get updated saved properties
+      window.dispatchEvent(new CustomEvent('refreshUser'));
+    } catch (error) {
+      console.error('Error saving property:', error);
+      toast.error('Failed to save property');
     }
   };
 
@@ -252,8 +280,11 @@ function PropertyDetails() {
                   {showVirtualTour ? 'View Photos' : '360° Tour'}
                 </button>
               )}
-              <button className="p-2 bg-white/90 rounded-full hover:bg-white transition-colors">
-                <Heart className="w-6 h-6 text-emerald-600" />
+              <button
+                onClick={handleSaveProperty}
+                className="p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
+              >
+                <Heart className={`w-6 h-6 text-emerald-600 ${user?.savedProperties?.includes(property.id) ? 'fill-emerald-600' : ''}`} />
               </button>
               <button className="p-2 bg-white/90 rounded-full hover:bg-white transition-colors">
                 <Share2 className="w-6 h-6 text-emerald-600" />

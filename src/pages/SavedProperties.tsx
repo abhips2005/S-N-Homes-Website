@@ -3,89 +3,11 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { PropertyService } from '../services/propertyService';
+import { UserService } from '../services/userService';
+import LoadingSpinner from '../components/LoadingSpinner';
+import toast from 'react-hot-toast';
 import type { Property } from '../types';
-
-// Mock saved properties data
-const mockProperties: Property[] = [
-  {
-    id: 'KE-123456-789',
-    title: 'Luxury Villa in Kochi',
-    description: 'Beautiful 4BHK villa with modern amenities and stunning views.',
-    price: 15000000,
-    type: 'residential',
-    location: 'Kochi',
-    district: 'Ernakulam',
-    bedrooms: 4,
-    bathrooms: 3,
-    area: 2500,
-    landArea: 10,
-    landAreaUnit: 'cent',
-    images: [
-      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
-    ],
-    features: ['Swimming Pool', 'Garden', 'Security'],
-    user_id: 'user1',
-    created_at: '2024-03-10',
-    is_premium: true,
-    status: 'available',
-    virtual_tour_url: 'https://pannellum.org/images/cerro-toco-0.jpg',
-    amenities: ['Pool', 'Garden', 'Security', 'Gym', 'Parking', 'Power Backup'],
-    nearbyPlaces: [
-      { name: 'City Mall', type: 'shopping', distance: 1.5 },
-      { name: 'International School', type: 'school', distance: 2 },
-      { name: 'Metro Station', type: 'transport', distance: 0.5 }
-    ],
-    energyRating: 'A',
-    constructionYear: 2022,
-    lastRenovated: '2023',
-    parkingSpaces: 2,
-    furnished: true,
-    views: 150,
-    coordinates: {
-      latitude: 9.9312,
-      longitude: 76.2673
-    }
-  },
-  {
-    id: 'KE-654321-987',
-    title: 'Modern Apartment in Trivandrum',
-    description: 'Spacious 3BHK apartment with great amenities.',
-    price: 8500000,
-    type: 'flat',
-    location: 'Trivandrum',
-    district: 'Thiruvananthapuram',
-    bedrooms: 3,
-    bathrooms: 2,
-    area: 1800,
-    landArea: 0,
-    landAreaUnit: 'cent',
-    images: [
-      'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
-    ],
-    features: ['Gym', 'Parking', 'Security'],
-    user_id: 'user1',
-    created_at: '2024-02-15',
-    is_premium: false,
-    status: 'available',
-    virtual_tour_url: '',
-    amenities: ['Gym', 'Parking', 'Security', 'Power Backup'],
-    nearbyPlaces: [
-      { name: 'Shopping Mall', type: 'shopping', distance: 1.0 },
-      { name: 'School', type: 'school', distance: 1.5 },
-      { name: 'Hospital', type: 'hospital', distance: 2.0 }
-    ],
-    energyRating: 'B',
-    constructionYear: 2020,
-    lastRenovated: '',
-    parkingSpaces: 1,
-    furnished: true,
-    views: 85,
-    coordinates: {
-      latitude: 8.5241,
-      longitude: 76.9366
-    }
-  }
-];
 
 const SavedProperties: React.FC = () => {
   const navigate = useNavigate();
@@ -94,19 +16,104 @@ const SavedProperties: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, this would be an API call to fetch the user's saved properties
-    // For now, we'll use mock data
     if (user) {
-      setTimeout(() => {
-        setSavedProperties(mockProperties);
-        setLoading(false);
-      }, 1000);
+      loadSavedProperties();
     } else {
       setLoading(false);
     }
   }, [user]);
 
-  const handleViewProperty = (propertyId: string) => {
+  // Listen for user refresh events to reload saved properties
+  useEffect(() => {
+    const handleUserRefresh = () => {
+      if (user) {
+        loadSavedProperties();
+      }
+    };
+
+    window.addEventListener('refreshUser', handleUserRefresh);
+    return () => window.removeEventListener('refreshUser', handleUserRefresh);
+  }, [user]);
+
+  const loadSavedProperties = async () => {
+    if (!user || !user.savedProperties || user.savedProperties.length === 0) {
+      setLoading(false);
+      setSavedProperties([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('Loading saved properties for user:', user.id);
+      console.log('Saved property IDs:', user.savedProperties);
+
+      const properties: Property[] = [];
+      
+      // Load each saved property
+      for (const propertyId of user.savedProperties) {
+        try {
+          const property = await PropertyService.getPropertyById(propertyId);
+          if (property) {
+            properties.push(property);
+          } else {
+            console.warn(`Property ${propertyId} not found, removing from saved list`);
+            // Remove invalid property ID from user's saved list
+            await UserService.removeSavedProperty(user.id, propertyId);
+          }
+        } catch (error) {
+          console.warn(`Error loading property ${propertyId}:`, error);
+        }
+      }
+
+      console.log('Saved properties loaded successfully:', properties.length);
+      setSavedProperties(properties);
+      
+      // Refresh user profile to get updated saved properties
+      window.dispatchEvent(new CustomEvent('refreshUser'));
+    } catch (error) {
+      console.error('Error loading saved properties:', error);
+      toast.error('Failed to load saved properties');
+      setSavedProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveProperty = async (propertyId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (!user) {
+      toast.error('Please login to manage saved properties');
+      return;
+    }
+
+    try {
+      await UserService.removeSavedProperty(user.id, propertyId);
+      setSavedProperties(prev => prev.filter(p => p.id !== propertyId));
+      toast.success('Property removed from saved');
+      
+      // Refresh user profile to get updated saved properties
+      window.dispatchEvent(new CustomEvent('refreshUser'));
+    } catch (error) {
+      console.error('Error removing saved property:', error);
+      toast.error('Failed to remove property');
+    }
+  };
+
+  const handleViewProperty = async (propertyId: string) => {
+    // Track viewing history if user is logged in
+    if (user) {
+      try {
+        await UserService.addToViewingHistory(user.id, propertyId);
+        await PropertyService.incrementViews(propertyId);
+        
+        // Refresh user profile to get updated viewing history
+        window.dispatchEvent(new CustomEvent('refreshUser'));
+      } catch (error) {
+        console.error('Error tracking view:', error);
+      }
+    }
+    
     navigate(`/property/${propertyId}`);
   };
 
@@ -144,7 +151,7 @@ const SavedProperties: React.FC = () => {
 
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+            <LoadingSpinner size="lg" />
           </div>
         ) : savedProperties.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
@@ -168,12 +175,12 @@ const SavedProperties: React.FC = () => {
                 key={property.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl shadow-lg overflow-hidden cursor-pointer"
+                className="bg-white rounded-2xl shadow-lg overflow-hidden cursor-pointer hover:shadow-xl transition-shadow"
                 onClick={() => handleViewProperty(property.id)}
               >
                 <div className="relative">
                   <img
-                    src={property.images[0]}
+                    src={property.images[0] || 'https://via.placeholder.com/400x300?text=No+Image'}
                     alt={property.title}
                     className="w-full h-48 object-cover"
                   />
@@ -184,11 +191,7 @@ const SavedProperties: React.FC = () => {
                   )}
                   <button 
                     className="absolute top-2 right-2 p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // In a real app, this would remove the property from saved
-                      setSavedProperties(prev => prev.filter(p => p.id !== property.id));
-                    }}
+                    onClick={(e) => handleRemoveProperty(property.id, e)}
                   >
                     <Heart className="w-5 h-5 text-red-500 fill-red-500" />
                   </button>
@@ -197,16 +200,18 @@ const SavedProperties: React.FC = () => {
                   <h3 className="font-semibold text-lg mb-1">{property.title}</h3>
                   <p className="text-gray-600 text-sm mb-2">{property.location}, {property.district}</p>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-emerald-600 font-medium">
+                    <span className="text-emerald-600 font-bold text-xl">
                       ₹{(property.price / 100000).toFixed(2)} Lakhs
                     </span>
-                    <div className="flex items-center space-x-2 text-sm text-gray-500">
-                      <span>{property.bedrooms} bed</span>
-                      <span>•</span>
-                      <span>{property.bathrooms} bath</span>
-                    </div>
+                    <span className="text-gray-500 text-xs">
+                      {property.views || 0} views
+                    </span>
                   </div>
-                  <p className="text-gray-500 text-sm line-clamp-2">{property.description}</p>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>{property.bedrooms} Beds</span>
+                    <span>{property.bathrooms} Baths</span>
+                    <span>{property.area} sq ft</span>
+                  </div>
                 </div>
               </motion.div>
             ))}

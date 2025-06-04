@@ -13,6 +13,9 @@ function Navbar() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Check if we're on the home page
+  const isHomePage = location.pathname === '/';
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
@@ -31,18 +34,21 @@ function Navbar() {
     }
   };
 
+  // Determine navbar styling based on page and scroll state
+  const shouldUseTransparentBg = isHomePage && !isScrolled;
+  
   const navbarClasses = `fixed w-full z-50 transition-all duration-300 ${
-    isScrolled ? 'bg-white/90 backdrop-blur-md shadow-lg' : 'bg-transparent'
+    shouldUseTransparentBg ? 'bg-transparent' : 'bg-white/90 backdrop-blur-md shadow-lg'
   }`;
 
   const linkClasses = `flex items-center space-x-1 px-4 py-2 rounded-xl transition-colors ${
-    isScrolled ? 'text-gray-700 hover:text-emerald-600' : 'text-white hover:text-emerald-400'
+    shouldUseTransparentBg ? 'text-white hover:text-emerald-400' : 'text-gray-700 hover:text-emerald-600'
   }`;
 
   const buttonClasses = `flex items-center space-x-1 px-4 py-2 rounded-xl transition-colors ${
-    isScrolled 
-      ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-      : 'bg-white/20 backdrop-blur-md text-white hover:bg-white/30'
+    shouldUseTransparentBg
+      ? 'bg-white/20 backdrop-blur-md text-white hover:bg-white/30'
+      : 'bg-emerald-600 text-white hover:bg-emerald-700'
   }`;
 
   const mobileMenuVariants = {
@@ -61,9 +67,9 @@ function Navbar() {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Home className={`h-8 w-8 ${isScrolled ? 'text-emerald-600' : 'text-white'}`} />
+                  <Home className={`h-8 w-8 ${shouldUseTransparentBg ? 'text-white' : 'text-emerald-600'}`} />
                 </motion.div>
-                <span className={`text-xl font-bold ${isScrolled ? 'text-gray-900' : 'text-white'}`}>
+                <span className={`text-xl font-bold ${shouldUseTransparentBg ? 'text-white' : 'text-gray-900'}`}>
                   Kerala Estates
                 </span>
               </Link>
@@ -95,7 +101,7 @@ function Navbar() {
               </Link>
               
               {user ? (
-                <UserMenu />
+                <UserMenu isTransparent={shouldUseTransparentBg} />
               ) : (
                 <Link to="/login" className={linkClasses}>
                   <User className="h-5 w-5" />
@@ -108,7 +114,7 @@ function Navbar() {
             <div className="md:hidden flex items-center">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className={`p-2 rounded-lg ${isScrolled ? 'text-gray-700' : 'text-white'}`}
+                className={`p-2 rounded-lg ${shouldUseTransparentBg ? 'text-white' : 'text-gray-700'}`}
               >
                 {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
