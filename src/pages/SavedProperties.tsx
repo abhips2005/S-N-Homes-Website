@@ -67,9 +67,6 @@ const SavedProperties: React.FC = () => {
 
       console.log('Saved properties loaded successfully:', properties.length);
       setSavedProperties(properties);
-      
-      // Refresh user profile to get updated saved properties
-      window.dispatchEvent(new CustomEvent('refreshUser'));
     } catch (error) {
       console.error('Error loading saved properties:', error);
       toast.error('Failed to load saved properties');
@@ -91,9 +88,6 @@ const SavedProperties: React.FC = () => {
       await UserService.removeSavedProperty(user.id, propertyId);
       setSavedProperties(prev => prev.filter(p => p.id !== propertyId));
       toast.success('Property removed from saved');
-      
-      // Refresh user profile to get updated saved properties
-      window.dispatchEvent(new CustomEvent('refreshUser'));
     } catch (error) {
       console.error('Error removing saved property:', error);
       toast.error('Failed to remove property');
@@ -106,9 +100,6 @@ const SavedProperties: React.FC = () => {
       try {
         await UserService.addToViewingHistory(user.id, propertyId);
         await PropertyService.incrementViews(propertyId);
-        
-        // Refresh user profile to get updated viewing history
-        window.dispatchEvent(new CustomEvent('refreshUser'));
       } catch (error) {
         console.error('Error tracking view:', error);
       }

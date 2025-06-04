@@ -177,25 +177,6 @@ const Dashboard: React.FC = () => {
     time: index === 0 ? 'Recently viewed' : `${index} view${index > 1 ? 's' : ''} ago`
   }));
 
-  const savedSearches = [
-    {
-      title: '3 BHK in Trivandrum',
-      filters: {
-        location: 'Trivandrum',
-        type: '3 BHK',
-        budget: '50-80 Lakhs'
-      }
-    },
-    {
-      title: 'Villa in Kochi',
-      filters: {
-        location: 'Kochi',
-        type: 'Villa',
-        budget: '1-2 Crores'
-      }
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-50 pt-20 pb-12">
       <div className="max-w-7xl mx-auto px-4">
@@ -312,33 +293,6 @@ const Dashboard: React.FC = () => {
                 transition={{ delay: 0.2 }}
                 className="space-y-6"
               >
-                <div className="bg-white rounded-2xl shadow-lg">
-                  <div className="p-6 border-b border-gray-100">
-                    <h2 className="text-xl font-semibold">Saved Searches</h2>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    {savedSearches.map((search, index) => (
-                      <Link
-                        key={index}
-                        to={`/properties?${new URLSearchParams(search.filters)}`}
-                        className="block p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                      >
-                        <h3 className="font-medium text-gray-900">{search.title}</h3>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {Object.entries(search.filters).map(([key, value]) => (
-                            <span
-                              key={key}
-                              className="px-2 py-1 bg-white rounded-full text-xs text-gray-600"
-                            >
-                              {value}
-                            </span>
-                          ))}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="bg-white rounded-2xl shadow-lg p-6">
                   <div className="text-center">
                     <Bell className="w-8 h-8 text-emerald-600 mx-auto mb-3" />

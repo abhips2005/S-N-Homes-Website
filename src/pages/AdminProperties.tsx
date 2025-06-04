@@ -3,77 +3,59 @@ import { motion } from 'framer-motion';
 import { Edit, Trash2, Eye, Search, Filter, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import type { Property } from '../types';
+import { PropertyService } from '../services/propertyService';
+import { UserService } from '../services/userService';
+import LoadingSpinner from '../components/LoadingSpinner';
+import type { Property, User } from '../types';
+
+interface PropertyWithOwner extends Property {
+  owner?: {
+    name: string;
+    phone: string;
+  };
+}
 
 const AdminProperties: React.FC = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [properties, setProperties] = useState<PropertyWithOwner[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // In a real app, this would be an API call to fetch properties
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      // Mock data - Replace with API call
-      const mockProperties: Property[] = [
-        {
-          id: 'KE-123456-789',
-          title: 'Luxury Villa in Kochi',
-          description: 'Beautiful 4BHK villa with modern amenities.',
-          type: 'residential',
-          location: 'Kochi',
-          district: 'Ernakulam',
-          price: 15000000,
-          area: 2500,
-          bedrooms: 4,
-          bathrooms: 3,
-          images: ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'],
-          status: 'available',
-          landArea: 10,
-          landAreaUnit: 'cent',
-          features: [],
-          amenities: [],
-          user_id: 'user1',
-          created_at: '2023-01-15',
-          is_premium: true,
-          furnished: true,
-          views: 150,
-          coordinates: { latitude: 9.9312, longitude: 76.2673 },
-          nearbyPlaces: []
-        },
-        {
-          id: 'KE-654321-987',
-          title: 'Modern Apartment in Trivandrum',
-          description: 'Spacious 3BHK apartment with great amenities.',
-          type: 'flat',
-          location: 'Trivandrum',
-          district: 'Thiruvananthapuram',
-          price: 8500000,
-          area: 1800,
-          bedrooms: 3,
-          bathrooms: 2,
-          images: ['https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'],
-          status: 'sold',
-          landArea: 0,
-          landAreaUnit: 'cent',
-          features: [],
-          amenities: [],
-          user_id: 'user2',
-          created_at: '2023-02-20',
-          is_premium: false,
-          furnished: true,
-          views: 85,
-          coordinates: { latitude: 8.5241, longitude: 76.9366 },
-          nearbyPlaces: []
-        }
-      ];
-      
-      setProperties(mockProperties);
-      setLoading(false);
-    }, 1000);
+    loadProperties();
   }, []);
+
+  const loadProperties = async () => {
+    try {
+      setLoading(true);
+      
+      // Load all properties from database
+      const allProperties = await PropertyService.getAllAvailableProperties(1000);
+      
+      // Get all users to map owner information
+      const allUsers = await UserService.getAllUsers();
+      const userMap = new Map<string, User>();
+      allUsers.forEach(user => userMap.set(user.id, user));
+      
+      // Combine properties with owner information
+      const propertiesWithOwners: PropertyWithOwner[] = allProperties.map(property => ({
+        ...property,
+        owner: userMap.get(property.user_id) ? {
+          name: userMap.get(property.user_id)!.name,
+          phone: userMap.get(property.user_id)!.phone
+        } : undefined
+      }));
+      
+      setProperties(propertiesWithOwners);
+      
+    } catch (error) {
+      console.error('Error loading properties:', error);
+      toast.error('Failed to load properties');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredProperties = properties.filter(property => 
     property.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -92,14 +74,34 @@ const AdminProperties: React.FC = () => {
     navigate(`/edit-property/${id}`);
   };
 
-  const handleDeleteProperty = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this property?')) {
-      // In a real app, this would be an API call to delete the property
-      console.log('Deleting property:', id);
-      
-      // Update local state
-      setProperties(prev => prev.filter(p => p.id !== id));
-      toast.success('Property deleted successfully');
+  const handleDeleteProperty = async (id: string) => {
+    const property = properties.find(p => p.id === id);
+    if (!property) return;
+
+    if (window.confirm(`Are you sure you want to delete "${property.title}"? This action cannot be undone.`)) {
+      try {
+        await PropertyService.deleteProperty(id);
+        setProperties(prev => prev.filter(p => p.id !== id));
+        toast.success('Property deleted successfully');
+      } catch (error) {
+        console.error('Error deleting property:', error);
+        toast.error('Failed to delete property');
+      }
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'bg-green-100 text-green-800';
+      case 'sold':
+        return 'bg-red-100 text-red-800';
+      case 'rented':
+        return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -107,7 +109,10 @@ const AdminProperties: React.FC = () => {
     <div className="min-h-screen bg-gray-50 pt-20 pb-12">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Manage Properties</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Manage Properties</h1>
+            <p className="text-gray-600 mt-2">Total: {properties.length} properties</p>
+          </div>
           <button 
             onClick={handleAddProperty}
             className="bg-emerald-600 text-white px-6 py-2 rounded-xl hover:bg-emerald-700 flex items-center space-x-2"
@@ -141,19 +146,23 @@ const AdminProperties: React.FC = () => {
                 <option value="available">Available</option>
                 <option value="sold">Sold</option>
                 <option value="rented">Rented</option>
+                <option value="pending">Pending</option>
               </select>
             </div>
           </div>
 
           {loading ? (
             <div className="flex justify-center items-center p-8">
-              <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+              <LoadingSpinner size="lg" />
             </div>
           ) : (
             <div className="overflow-x-auto">
               {filteredProperties.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
-                  No properties found matching your criteria
+                  {searchTerm || selectedStatus !== 'all' 
+                    ? 'No properties found matching your criteria'
+                    : 'No properties available'
+                  }
                 </div>
               ) : (
                 <table className="w-full">
@@ -161,6 +170,9 @@ const AdminProperties: React.FC = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Property
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Owner
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Location
@@ -172,64 +184,94 @@ const AdminProperties: React.FC = () => {
                         Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Views
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredProperties.map((property) => (
-                      <tr key={property.id}>
+                      <motion.tr 
+                        key={property.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="hover:bg-gray-50"
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <img
-                              src={property.images[0]}
+                              src={property.images[0] || 'https://via.placeholder.com/400x300?text=No+Image'}
                               alt={property.title}
-                              className="w-10 h-10 rounded-lg object-cover"
+                              className="w-12 h-12 rounded-lg object-cover"
                             />
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{property.title}</div>
+                              <div className="text-sm font-medium text-gray-900 max-w-[200px] truncate">
+                                {property.title}
+                              </div>
                               <div className="text-sm text-gray-500">ID: {property.id}</div>
+                              {property.is_premium && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                                  Premium
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {property.location}
+                          {property.owner ? (
+                            <div>
+                              <div className="font-medium text-gray-900">{property.owner.name}</div>
+                              <div className="text-gray-500">{property.owner.phone}</div>
+                            </div>
+                          ) : (
+                            <div className="text-gray-400">No owner info</div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div>
+                            <div className="font-medium">{property.location}</div>
+                            <div className="text-gray-400">{property.district}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                           ₹{(property.price / 100000).toFixed(2)} Lakhs
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            property.status === 'available' ? 'bg-green-100 text-green-800' :
-                            property.status === 'sold' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {property.status.charAt(0).toUpperCase() + property.status.slice(1)}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(property.status)}`}>
+                            {property.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <div className="flex space-x-3">
-                            <button 
+                          {property.views || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
                               onClick={() => handleViewProperty(property.id)}
-                              className="text-blue-600 hover:text-blue-800"
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50"
+                              title="View Property"
                             >
-                              <Eye className="w-5 h-5" />
+                              <Eye className="w-4 h-4" />
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleEditProperty(property.id)}
-                              className="text-emerald-600 hover:text-emerald-800"
+                              className="text-green-600 hover:text-green-900 p-1 rounded-full hover:bg-green-50"
+                              title="Edit Property"
                             >
-                              <Edit className="w-5 h-5" />
+                              <Edit className="w-4 h-4" />
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteProperty(property.id)}
-                              className="text-red-600 hover:text-red-800"
+                              className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50"
+                              title="Delete Property"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
