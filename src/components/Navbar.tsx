@@ -50,11 +50,11 @@ function Navbar() {
   const shouldUseTransparentBg = isHomePage && !isScrolled;
 
   const navbarClasses = `fixed w-full z-50 transition-all duration-300 ${
-    shouldUseTransparentBg ? 'bg-transparent' : 'bg-white/90 backdrop-blur-md shadow-lg'
+    shouldUseTransparentBg ? 'bg-transparent' : 'bg-gray-900/95 backdrop-blur-md shadow-lg'
   }`;
 
   const linkClasses = `flex items-center space-x-1 px-4 py-2 rounded-xl transition-colors ${
-    shouldUseTransparentBg ? 'text-white hover:text-emerald-400' : 'text-gray-700 hover:text-emerald-600'
+    shouldUseTransparentBg ? 'text-white hover:text-emerald-400' : 'text-white hover:text-emerald-400'
   }`;
 
   const buttonClasses = `flex items-center space-x-1 px-4 py-2 rounded-xl transition-colors ${
@@ -85,7 +85,7 @@ function Navbar() {
                     className="h-16 w-16"
                   />
                 </motion.div>
-                <span className={`text-xl font-bold ${shouldUseTransparentBg ? 'text-white' : 'text-gray-900'}`}>
+                <span className={`text-xl font-bold ${shouldUseTransparentBg ? 'text-white' : 'text-white'}`}>
                   S N Homes
                 </span>
               </Link>
@@ -148,7 +148,7 @@ function Navbar() {
               
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className={`p-2 rounded-lg ${shouldUseTransparentBg ? 'text-white' : 'text-gray-700'}`}
+                className={`p-2 rounded-lg ${shouldUseTransparentBg ? 'text-white' : 'text-white'}`}
               >
                 {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
