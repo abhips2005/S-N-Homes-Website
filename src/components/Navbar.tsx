@@ -70,7 +70,7 @@ function Navbar() {
                   <Home className={`h-8 w-8 ${shouldUseTransparentBg ? 'text-white' : 'text-emerald-600'}`} />
                 </motion.div>
                 <span className={`text-xl font-bold ${shouldUseTransparentBg ? 'text-white' : 'text-gray-900'}`}>
-                  Kerala Estates
+                  S N Homes
                 </span>
               </Link>
             </div>

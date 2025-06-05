@@ -115,7 +115,7 @@ ${property.title}
 📍 Location: ${property.location}
 🏷️ Status: ${property.status}
 
-🔍 View details: https://keralaestates.com/property/${property.id}
+🔍 View details: https://snhomes.com/property/${property.id}
 
 Reply with:
 1️⃣ Schedule viewing

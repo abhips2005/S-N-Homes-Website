@@ -134,7 +134,7 @@ const Login: React.FC = () => {
           <div className="p-8">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-              <p className="text-gray-600">Sign in to continue to Kerala Estates</p>
+              <p className="text-gray-600">Sign in to continue to S N Homes</p>
             </div>
 
             <form onSubmit={handleEmailLogin} className="space-y-4">

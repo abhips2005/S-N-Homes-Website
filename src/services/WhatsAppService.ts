@@ -39,7 +39,7 @@ export class WhatsAppService {
       `🚿 ${property.bathrooms} Bathrooms\n` +
       `📏 ${property.area} sq.ft\n\n` +
       `🌟 *Amenities:*\n${property.amenities.map(a => `• ${a}`).join('\n')}\n\n` +
-      `🔍 View details: https://keralaestates.com/property/${property.id}\n\n` +
+              `🔍 View details: https://snhomes.com/property/${property.id}\n\n` +
       `Reply with:\n` +
       `1️⃣ Schedule viewing\n` +
       `2️⃣ Contact agent\n` +

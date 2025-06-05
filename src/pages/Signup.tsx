@@ -177,7 +177,7 @@ const Signup: React.FC = () => {
           <div className="p-8">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Create an Account</h1>
-              <p className="text-gray-600">Join Kerala Estates today</p>
+              <p className="text-gray-600">Join S N Homes today</p>
             </div>
 
             <form onSubmit={handleEmailSignup} className="space-y-4">

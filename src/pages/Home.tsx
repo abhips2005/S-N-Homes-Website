@@ -58,7 +58,7 @@ function Home() {
       name: 'Rajesh Kumar',
       role: 'Property Owner',
       image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=150&h=150',
-      text: 'Kerala Estates helped me sell my property within a month. Their AI-powered platform brought the right buyers to me.',
+      text: 'S N Homes helped me sell my property within a month. Their AI-powered platform brought the right buyers to me.',
     },
     {
       name: 'Priya Menon',
@@ -183,7 +183,7 @@ function Home() {
             variants={fadeInUp}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold mb-4">Why Choose Kerala Estates?</h2>
+            <h2 className="text-4xl font-bold mb-4">Why Choose S N Homes?</h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Experience the perfect blend of traditional values and cutting-edge technology
             </p>
@@ -280,7 +280,7 @@ function Home() {
               Ready to List Your Property?
             </h2>
             <p className="text-white/90 text-xl mb-8 max-w-2xl mx-auto">
-              Join thousands of property owners who trust Kerala Estates to find the right buyers
+              Join thousands of property owners who trust S N Homes to find the right buyers
             </p>
             <Link
               to="/add-property"

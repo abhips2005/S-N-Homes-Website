@@ -8,10 +8,10 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="text-xl font-bold mb-4">Kerala Estates</h3>
-            <p className="text-gray-400">
-              Your trusted partner in finding the perfect property in Kerala
-            </p>
+                    <h3 className="text-xl font-bold mb-4">S N Homes</h3>
+        <p className="text-gray-400">
+          Your trusted partner in finding the perfect property
+        </p>
           </div>
           
           <div>
@@ -33,7 +33,7 @@ function Footer() {
               </p>
               <p className="flex items-center">
                 <Mail className="w-5 h-5 mr-2" />
-                info@keralaestates.com
+                info@snhomes.com
               </p>
             </div>
           </div>
@@ -55,7 +55,7 @@ function Footer() {
         </div>
         
         <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-          <p>&copy; {new Date().getFullYear()} Kerala Estates. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} S N Homes. All rights reserved.</p>
         </div>
       </div>
     </footer>

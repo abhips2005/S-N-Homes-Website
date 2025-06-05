@@ -18,8 +18,8 @@ const AdminLogin: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Admin credentials: admin@keralaestate.com / admin123
-      if (email === 'admin@keralaestate.com' && password === 'admin123') {
+          // Admin credentials: admin@snhomes.com / admin123
+    if (email === 'admin@snhomes.com' && password === 'admin123') {
         // Mock admin user
         const adminData = {
           id: 'admin1',
@@ -122,7 +122,7 @@ const AdminLogin: React.FC = () => {
 
             <div className="mt-6 text-center text-gray-500 text-sm">
               <p>Admin Demo Credentials:</p>
-              <p>Email: admin@keralaestate.com</p>
+              <p>Email: admin@snhomes.com</p>
               <p>Password: admin123</p>
             </div>
           </div>
