@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, X, Wifi, WifiOff } from 'lucide-react';
+import { Download, X, WifiOff } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -164,13 +164,6 @@ function PWAInstallPrompt() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Online Status Indicator */}
-      <div className="fixed top-20 right-4 z-40">
-        <div className={`w-3 h-3 rounded-full transition-colors ${
-          isOnline ? 'bg-green-500' : 'bg-red-500'
-        }`} title={isOnline ? 'Online' : 'Offline'} />
-      </div>
     </>
   );
 }

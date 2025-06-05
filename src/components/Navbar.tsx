@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, User, Plus, Menu, X, Bell, Heart } from 'lucide-react';
+import { Search, User, Plus, Menu, X, Bell, Heart, Wifi, WifiOff } from 'lucide-react';
 import UserMenu from './UserMenu';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -21,8 +22,19 @@ function Navbar() {
       setIsScrolled(window.scrollY > 20);
     };
 
+    // Handle online/offline status
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const handleListPropertyClick = () => {
@@ -104,6 +116,15 @@ function Navbar() {
                 <span>Notifications</span>
               </Link>
               
+              {/* Online/Offline Status */}
+              <div className="flex items-center px-2" title={isOnline ? 'Online' : 'Offline'}>
+                {isOnline ? (
+                  <Wifi className={`h-5 w-5 ${shouldUseTransparentBg ? 'text-green-400' : 'text-green-600'}`} />
+                ) : (
+                  <WifiOff className={`h-5 w-5 ${shouldUseTransparentBg ? 'text-red-400' : 'text-red-600'}`} />
+                )}
+              </div>
+              
               {user ? (
                 <UserMenu isTransparent={shouldUseTransparentBg} />
               ) : (
@@ -114,8 +135,17 @@ function Navbar() {
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <div className="md:hidden flex items-center">
+            {/* Mobile Menu Button with Status */}
+            <div className="md:hidden flex items-center space-x-2">
+              {/* Mobile Online/Offline Status */}
+              <div className="flex items-center" title={isOnline ? 'Online' : 'Offline'}>
+                {isOnline ? (
+                  <Wifi className={`h-5 w-5 ${shouldUseTransparentBg ? 'text-green-400' : 'text-green-600'}`} />
+                ) : (
+                  <WifiOff className={`h-5 w-5 ${shouldUseTransparentBg ? 'text-red-400' : 'text-red-600'}`} />
+                )}
+              </div>
+              
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className={`p-2 rounded-lg ${shouldUseTransparentBg ? 'text-white' : 'text-gray-700'}`}
