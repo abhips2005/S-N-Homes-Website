@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import type { Property } from '../types';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { PropertyService } from '../services/propertyService';
+import { NotificationService } from '../services/NotificationService';
 
 function AddProperty() {
   const navigate = useNavigate();
@@ -148,6 +149,17 @@ function AddProperty() {
 
       // Create property with images
       const propertyId = await PropertyService.createProperty(propertyData, images);
+      
+      // Trigger automatic notifications for new property
+      try {
+        const fullPropertyData = {
+          ...propertyData,
+          id: propertyId
+        };
+        await NotificationService.notifyNewProperty(fullPropertyData);
+      } catch (error) {
+        console.warn('Error sending new property notifications:', error);
+      }
       
       toast.success(`Property listed successfully! Property ID: KE-${propertyId.slice(-6)}`);
       navigate('/dashboard?tab=listings');

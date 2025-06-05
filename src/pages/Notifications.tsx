@@ -3,54 +3,20 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Home, Calendar, Tag, Settings, Star, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationService } from '../services/NotificationService';
+import toast from 'react-hot-toast';
 
 interface Notification {
   id: string;
   title: string;
   message: string;
   type: 'system' | 'property' | 'price' | 'news';
+  user_id: string;
   created_at: string;
   read: boolean;
   property_id?: string;
+  data?: any;
 }
-
-// Mock notifications data
-const mockNotifications: Notification[] = [
-  {
-    id: 'n1',
-    title: 'New Property Match',
-    message: 'A new property matching your preferences is now available in Kochi.',
-    type: 'property',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    read: false,
-    property_id: 'KE-123456-789'
-  },
-  {
-    id: 'n2',
-    title: 'Price Drop Alert',
-    message: 'The property you saved in Trivandrum has reduced its price by ₹3 Lakhs.',
-    type: 'price',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
-    read: false,
-    property_id: 'KE-654321-987'
-  },
-  {
-    id: 'n3',
-    title: 'Welcome to Kerala Estates',
-    message: 'Thank you for joining Kerala Estates. Start exploring properties!',
-    type: 'system',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(), // 7 days ago
-    read: true,
-  },
-  {
-    id: 'n4',
-    title: 'Kerala Real Estate News',
-    message: 'New government policies affecting property taxes in Kerala - what you need to know.',
-    type: 'news',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
-    read: true,
-  },
-];
 
 const Notifications: React.FC = () => {
   const navigate = useNavigate();
@@ -60,25 +26,40 @@ const Notifications: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<string>('all');
 
   useEffect(() => {
-    // In a real app, this would be an API call to fetch the user's notifications
-    // For now, we'll use mock data
-    if (user) {
-      setTimeout(() => {
-        setNotifications(mockNotifications);
-        setLoading(false);
-      }, 1000);
-    } else {
-      setLoading(false);
-    }
+    loadNotifications();
   }, [user]);
 
-  const handleNotificationClick = (notification: Notification) => {
+  const loadNotifications = async () => {
+    if (!user) {
+      console.log('No user logged in');
+      setLoading(false);
+      return;
+    }
+
+    console.log('Current logged in user:', { id: user.id, name: user.name, email: user.email });
+
+    try {
+      const userNotifications = await NotificationService.getUserNotifications(user.id);
+      console.log('Received notifications from service:', userNotifications);
+      setNotifications(userNotifications);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
     // Mark as read
-    setNotifications(prevNotifications =>
-      prevNotifications.map(n =>
-        n.id === notification.id ? { ...n, read: true } : n
-      )
-    );
+    if (!notification.read) {
+      await NotificationService.markAsRead(notification.id);
+      setNotifications(prevNotifications =>
+        prevNotifications.map(n =>
+          n.id === notification.id ? { ...n, read: true } : n
+        )
+      );
+    }
 
     // Navigate based on notification type
     if (notification.type === 'property' && notification.property_id) {
@@ -88,7 +69,10 @@ const Notifications: React.FC = () => {
     }
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
+    if (!user) return;
+    
+    await NotificationService.markAllAsRead(user.id);
     setNotifications(prevNotifications =>
       prevNotifications.map(n => ({ ...n, read: true }))
     );
@@ -161,14 +145,16 @@ const Notifications: React.FC = () => {
       <div className="max-w-4xl mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold">Notifications</h1>
-          {notifications.some(n => !n.read) && (
-            <button
-              onClick={handleMarkAllAsRead}
-              className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
-            >
-              Mark all as read
-            </button>
-          )}
+          <div className="flex space-x-3">
+            {notifications.some(n => !n.read) && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mb-6 flex space-x-2 overflow-x-auto pb-2">

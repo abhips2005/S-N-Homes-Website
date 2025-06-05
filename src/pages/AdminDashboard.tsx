@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Home, Users, FileText, Settings, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Home, Users, FileText, Settings, TrendingUp, AlertTriangle, Bell } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserService } from '../services/userService';
 import { PropertyService } from '../services/propertyService';
@@ -193,6 +193,13 @@ const AdminDashboard: React.FC = () => {
               >
                 <Users className="w-6 h-6 text-emerald-600 mr-3" />
                 <span>Manage Users</span>
+              </Link>
+              <Link
+                to="/admin/notifications"
+                className="flex items-center p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <Bell className="w-6 h-6 text-emerald-600 mr-3" />
+                <span>Send Notifications</span>
               </Link>
               <Link
                 to="/admin/reports"

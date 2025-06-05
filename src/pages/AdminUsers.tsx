@@ -18,7 +18,7 @@ const AdminUsers: React.FC = () => {
     name: '',
     email: '',
     phone: '',
-    role: 'user',
+      role: 'user',
     password: ''
   });
 

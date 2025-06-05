@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Pannellum from 'react-pannellum';
-import { MapPin, Bed, Bath, Square, IndianRupee, Calendar, Phone, Mail, Heart, Share2, Eye, MessageCircle, DollarSign, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Bed, Bath, Square, IndianRupee, Calendar, Heart, Share2, Eye, MessageCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PropertyService } from '../services/propertyService';
 import { UserService } from '../services/userService';
+import { NotificationService } from '../services/NotificationService';
 import toast from 'react-hot-toast';
 import type { Property } from '../types';
 
@@ -15,8 +16,7 @@ function PropertyDetails() {
   const { user } = useAuth();
   const [activeImage, setActiveImage] = useState(0);
   const [showVirtualTour, setShowVirtualTour] = useState(false);
-  const [showNegotiateModal, setShowNegotiateModal] = useState(false);
-  const [negotiatePrice, setNegotiatePrice] = useState('');
+
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +47,9 @@ function PropertyDetails() {
               PropertyService.incrementViews(id)
             ]);
             console.log('Viewing history tracked and views incremented');
+            
+            // Trigger notification for related properties
+            await NotificationService.notifyRelatedProperties(user.id, propertyData);
             
             // Refresh user profile to get updated viewing history
             window.dispatchEvent(new CustomEvent('refreshUser'));
@@ -107,98 +110,29 @@ function PropertyDetails() {
       return;
     }
     
+    if (!property) return;
+
     try {
-      // In a real app, this would create a new chat via API
-      const chatId = `chat_${Date.now()}`;
-      const newChat = {
-        id: chatId,
-        property_id: property?.id,
-        user_id: user.id,
-        admin_id: 'admin1',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        messages: [
-          {
-            id: `msg_${Date.now()}`,
-            sender_id: user.id,
-            content: `I'd like more details about property ${property?.title} (ID: ${property?.id})`,
-            sent_at: new Date().toISOString(),
-            is_read: false,
-          }
-        ],
-        status: 'active'
-      };
+      // Create WhatsApp message
+      const userName = user.displayName || user.name || 'User';
+      const propertyLink = `${window.location.origin}/property/${property.id}`;
+      const message = `Hi, I am ${userName}. I would like to know more about this property: ${propertyLink}`;
       
-      // This would be an API call in a real app
-      console.log('Creating new chat:', newChat);
+      // WhatsApp API URL with your number and the message
+      const whatsappNumber = '9605807957'; // Your WhatsApp number
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
       
-      toast.success('New chat created with the agent');
-      // Navigate to the specific chat with the newly created chat ID
-      navigate(`/dashboard?tab=messages&chatId=${chatId}`);
+      // Open WhatsApp in new tab
+      window.open(whatsappUrl, '_blank');
+      
+      toast.success('Redirecting to WhatsApp...');
     } catch (error) {
-      console.error('Error creating chat:', error);
-      toast.error('Failed to create chat. Please try again.');
+      console.error('Error opening WhatsApp:', error);
+      toast.error('Failed to open WhatsApp. Please try again.');
     }
   };
 
-  const handleNegotiateClick = () => {
-    if (!user) {
-      toast.error('Please login to negotiate');
-      navigate('/login');
-      return;
-    }
-    
-    setShowNegotiateModal(true);
-  };
 
-  const handleNegotiateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const price = parseFloat(negotiatePrice);
-    if (isNaN(price) || price <= 0) {
-      toast.error('Please enter a valid price');
-      return;
-    }
-    
-    try {
-      // In a real app, this would create a new chat via API
-      const chatId = `chat_${Date.now()}`;
-      const newChat = {
-        id: chatId,
-        property_id: property?.id,
-        user_id: user?.id,
-        admin_id: 'admin1',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        messages: [
-          {
-            id: `msg_${Date.now()}`,
-            sender_id: user?.id,
-            content: `I'd like to negotiate the price for ${property?.title}. My offer is ₹${(price / 100000).toFixed(2)} Lakhs.`,
-            sent_at: new Date().toISOString(),
-            is_read: false,
-          }
-        ],
-        status: 'active',
-        negotiation: {
-          original_price: property?.price,
-          offer_price: price,
-          status: 'pending'
-        }
-      };
-      
-      // This would be an API call in a real app
-      console.log('Creating negotiation chat:', newChat);
-      
-      toast.success('Negotiation request sent to the agent');
-      // Navigate to the specific chat with the newly created chat ID
-      navigate(`/dashboard?tab=messages&chatId=${chatId}`);
-      setShowNegotiateModal(false);
-    } catch (error) {
-      console.error('Error creating negotiation chat:', error);
-      toast.error('Failed to send negotiation. Please try again.');
-    }
-  };
 
   if (loading) {
     return (
@@ -409,14 +343,6 @@ function PropertyDetails() {
                     <MessageCircle className="w-5 h-5" />
                     <span>Get More Details</span>
                   </button>
-                  
-                  <button
-                    onClick={handleNegotiateClick}
-                    className="w-full border border-emerald-600 text-emerald-600 py-3 rounded-xl hover:bg-emerald-50 transition-colors flex justify-center items-center space-x-2"
-                  >
-                    <DollarSign className="w-5 h-5" />
-                    <span>Negotiate Price</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -429,72 +355,7 @@ function PropertyDetails() {
         </motion.div>
       </div>
 
-      {/* Negotiate Price Modal */}
-      <AnimatePresence>
-        {showNegotiateModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowNegotiateModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6 bg-emerald-600 text-white flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Negotiate Price</h2>
-                <button onClick={() => setShowNegotiateModal(false)}>
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
 
-              <form onSubmit={handleNegotiateSubmit} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Price
-                  </label>
-                  <div className="flex items-center space-x-2 text-lg font-medium">
-                    <IndianRupee className="w-5 h-5 text-emerald-600" />
-                    <span>{(property.price / 100000).toFixed(2)} Lakhs</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="negotiatePrice" className="block text-sm font-medium text-gray-700 mb-1">
-                    Your Offer (₹ in Lakhs)
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      id="negotiatePrice"
-                      type="number"
-                      step="0.01"
-                      placeholder="Enter your offer"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      value={negotiatePrice}
-                      onChange={(e) => setNegotiatePrice(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center space-x-2"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>Send Offer</span>
-                </button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

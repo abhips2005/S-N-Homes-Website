@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Home, Eye, Heart, Bell, Clock, Calendar, MapPin, IndianRupee, ArrowRight, MessageSquare, List } from 'lucide-react';
+import { Home, Eye, Heart, Bell, Clock, Calendar, MapPin, IndianRupee, ArrowRight, List } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PropertyService } from '../services/propertyService';
 import LoadingSpinner from '../components/LoadingSpinner';
-import MessageCenter from '../components/MessageCenter';
+
 import UserListings from '../pages/UserListings';
 import AIRecommendationButton from '../components/AIRecommendationButton';
 import type { Property } from '../types';
@@ -14,7 +14,11 @@ const Dashboard: React.FC = () => {
   const { user, loading, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'overview');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const tab = searchParams.get('tab') || 'overview';
+    // Redirect messages to overview since messages are no longer available
+    return tab === 'messages' ? 'overview' : tab;
+  });
   const [userListingsCount, setUserListingsCount] = useState(0);
   const [recentProperties, setRecentProperties] = useState<Property[]>([]);
   const [allAvailableProperties, setAllAvailableProperties] = useState<Property[]>([]);
@@ -156,13 +160,7 @@ const Dashboard: React.FC = () => {
       color: 'purple',
       onClick: () => handleTabChange('listings')
     },
-    { 
-      label: 'Messages', 
-      value: '0', // This would come from a message service
-      icon: MessageSquare, 
-      color: 'yellow',
-      onClick: () => handleTabChange('messages')
-    },
+
   ];
 
   // Create recent activity from user's actual viewing history
@@ -198,16 +196,7 @@ const Dashboard: React.FC = () => {
             >
               Overview
             </button>
-            <button
-              onClick={() => handleTabChange('messages')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'messages'
-                  ? 'border-emerald-600 text-emerald-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Messages
-            </button>
+
             <button
               onClick={() => handleTabChange('listings')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -310,11 +299,7 @@ const Dashboard: React.FC = () => {
           </>
         )}
 
-        {activeTab === 'messages' && (
-          <div className="mb-8">
-            <MessageCenter />
-          </div>
-        )}
+
 
         {activeTab === 'listings' && (
           <div className="mb-8">

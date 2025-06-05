@@ -25,6 +25,7 @@ import AdminReports from './pages/AdminReports';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
 import AdminWhatsApp from './pages/AdminWhatsApp';
+import AdminNotifications from './pages/AdminNotifications';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
@@ -61,6 +62,7 @@ function App() {
                   <Route path="/admin/properties" element={<AdminProperties />} />
                   <Route path="/admin/reports" element={<AdminReports />} />
                   <Route path="/admin/users" element={<AdminUsers />} />
+                  <Route path="/admin/notifications" element={<AdminNotifications />} />
                   <Route path="/admin/settings" element={<AdminSettings />} />
                   <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
                 </Route>

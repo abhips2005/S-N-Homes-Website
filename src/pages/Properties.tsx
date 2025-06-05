@@ -244,30 +244,30 @@ function Properties() {
           </div>
         ) : (
           <>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+        >
+          {properties.map((property) => (
             <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-            >
-              {properties.map((property) => (
-                <motion.div
-                  key={property.id}
-                  variants={itemVariants}
+              key={property.id}
+              variants={itemVariants}
                   className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
                   onClick={() => handlePropertyClick(property.id)}
-                >
-                  <div className="relative">
-                    <img
+            >
+                <div className="relative">
+                  <img
                       src={property.images[0] || 'https://via.placeholder.com/400x300?text=No+Image'}
-                      alt={property.title}
-                      className="w-full h-64 object-cover"
-                    />
-                    {property.is_premium && (
-                      <div className="absolute top-4 left-4 bg-emerald-600 text-white px-3 py-1 rounded-full text-sm">
-                        Premium
-                      </div>
-                    )}
+                    alt={property.title}
+                    className="w-full h-64 object-cover"
+                  />
+                  {property.is_premium && (
+                    <div className="absolute top-4 left-4 bg-emerald-600 text-white px-3 py-1 rounded-full text-sm">
+                      Premium
+                    </div>
+                  )}
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -282,43 +282,43 @@ function Properties() {
                             : 'text-emerald-600'
                         }`} 
                       />
-                    </button>
+                  </button>
+                </div>
+                
+                <div className="p-6">
+                  <div className="flex items-center space-x-2 text-gray-500 text-sm mb-3">
+                    <MapPin className="w-4 h-4" />
+                      <span>{property.location}, {property.district}</span>
                   </div>
                   
-                  <div className="p-6">
-                    <div className="flex items-center space-x-2 text-gray-500 text-sm mb-3">
-                      <MapPin className="w-4 h-4" />
-                      <span>{property.location}, {property.district}</span>
-                    </div>
-                    
                     <h3 className="text-xl font-semibold mb-2 truncate">{property.title}</h3>
-                    
+                  
                     <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
                       {property.bedrooms && property.bedrooms > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Bed className="w-4 h-4 text-gray-400" />
-                          <span>{property.bedrooms} Beds</span>
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-1">
+                        <Bed className="w-4 h-4 text-gray-400" />
+                        <span>{property.bedrooms} Beds</span>
+                      </div>
+                    )}
                       {property.bathrooms && property.bathrooms > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Bath className="w-4 h-4 text-gray-400" />
-                          <span>{property.bathrooms} Baths</span>
-                        </div>
-                      )}
                       <div className="flex items-center space-x-1">
-                        <Square className="w-4 h-4 text-gray-400" />
-                        <span>{property.area} sq.ft</span>
+                        <Bath className="w-4 h-4 text-gray-400" />
+                        <span>{property.bathrooms} Baths</span>
                       </div>
+                    )}
+                    <div className="flex items-center space-x-1">
+                      <Square className="w-4 h-4 text-gray-400" />
+                      <span>{property.area} sq.ft</span>
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-1">
-                        <IndianRupee className="w-5 h-5 text-emerald-600" />
-                        <span className="text-xl font-bold text-emerald-600">
-                          {(property.price / 100000).toFixed(2)} Lakhs
-                        </span>
-                      </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1">
+                      <IndianRupee className="w-5 h-5 text-emerald-600" />
+                      <span className="text-xl font-bold text-emerald-600">
+                        {(property.price / 100000).toFixed(2)} Lakhs
+                      </span>
+                    </div>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -326,13 +326,13 @@ function Properties() {
                         }}
                         className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
                       >
-                        View Details
-                      </button>
-                    </div>
+                      View Details
+                    </button>
                   </div>
-                </motion.div>
-              ))}
+                </div>
             </motion.div>
+          ))}
+        </motion.div>
 
             {/* Load More Button */}
             {hasMore && (

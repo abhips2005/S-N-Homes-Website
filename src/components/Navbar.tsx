@@ -36,7 +36,7 @@ function Navbar() {
 
   // Determine navbar styling based on page and scroll state
   const shouldUseTransparentBg = isHomePage && !isScrolled;
-  
+
   const navbarClasses = `fixed w-full z-50 transition-all duration-300 ${
     shouldUseTransparentBg ? 'bg-transparent' : 'bg-white/90 backdrop-blur-md shadow-lg'
   }`;
