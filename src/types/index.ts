@@ -20,11 +20,10 @@ export interface Property {
   virtual_tour_url?: string;
   amenities: string[];
   nearbyPlaces: NearbyPlace[];
-  energyRating: string;
   constructionYear?: number;
   lastRenovated?: string;
   parkingSpaces?: number;
-  furnished: boolean;
+  furnished: 'Yes' | 'No' | 'Semi Furnished' | 'Not Applicable';
   views: number;
   coordinates: {
     latitude: number;
@@ -34,7 +33,7 @@ export interface Property {
 
 export interface NearbyPlace {
   name: string;
-  type: 'school' | 'hospital' | 'shopping' | 'transport' | 'restaurant';
+  type: 'school' | 'hospital' | 'shopping' | 'transport' | 'restaurant' | 'other';
   distance: number;
 }
 

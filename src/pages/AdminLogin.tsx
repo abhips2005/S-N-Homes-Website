@@ -18,8 +18,16 @@ const AdminLogin: React.FC = () => {
     setIsLoading(true);
 
     try {
-          // Admin credentials: admin@snhomes.com / admin123
-    if (email === 'admin@snhomes.com' && password === 'admin123') {
+      // Get admin credentials from environment variables
+      const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+      const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD;
+      
+      if (!adminEmail || !adminPassword) {
+        toast.error('Admin credentials not configured');
+        return;
+      }
+      
+      if (email === adminEmail && password === adminPassword) {
         // Mock admin user
         const adminData = {
           id: 'admin1',
@@ -120,11 +128,7 @@ const AdminLogin: React.FC = () => {
               </button>
             </form>
 
-            <div className="mt-6 text-center text-gray-500 text-sm">
-              <p>Admin Demo Credentials:</p>
-              <p>Email: admin@snhomes.com</p>
-              <p>Password: admin123</p>
-            </div>
+
           </div>
         </motion.div>
       </div>

@@ -160,13 +160,13 @@ function PropertyDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 pt-16 md:pt-20">
+      <div className="max-w-7xl mx-auto px-2 md:px-4 py-4 md:py-8">
         <motion.div
           initial="hidden"
           animate="visible"
           variants={fadeInUp}
-          className="bg-white rounded-2xl shadow-lg overflow-hidden"
+          className="bg-white rounded-xl md:rounded-2xl shadow-lg overflow-hidden"
         >
           {/* Image Gallery */}
           <div className="relative">
@@ -174,7 +174,7 @@ function PropertyDetails() {
               {showVirtualTour && property.virtual_tour_url ? (
                 <Pannellum
                   width="100%"
-                  height="600px"
+                  height={window.innerWidth < 768 ? "300px" : "600px"}
                   image={property.virtual_tour_url}
                   pitch={10}
                   yaw={180}
@@ -188,16 +188,16 @@ function PropertyDetails() {
                 <img
                   src={property.images[activeImage]}
                   alt={property.title}
-                  className="w-full h-[600px] object-cover"
+                  className="w-full h-[300px] md:h-[600px] object-cover"
                 />
               )}
             </div>
             
-            <div className="absolute bottom-4 left-4 right-4 flex justify-center space-x-2">
+            <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 right-2 md:right-4 flex justify-center space-x-2">
               {property.images.map((_, index) => (
                 <button
                   key={index}
-                  className={`w-3 h-3 rounded-full ${
+                  className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
                     index === activeImage ? 'bg-white' : 'bg-white/50'
                   }`}
                   onClick={() => setActiveImage(index)}
@@ -205,142 +205,148 @@ function PropertyDetails() {
               ))}
             </div>
 
-            <div className="absolute top-4 right-4 flex space-x-2">
+            <div className="absolute top-2 md:top-4 right-2 md:right-4 flex space-x-1 md:space-x-2">
               {property.virtual_tour_url && (
                 <button
                   onClick={() => setShowVirtualTour(!showVirtualTour)}
-                  className="px-4 py-2 bg-white/90 rounded-xl text-emerald-600 font-medium hover:bg-white transition-colors"
+                  className="px-3 py-2 md:px-4 md:py-2 bg-white/90 rounded-lg md:rounded-xl text-emerald-600 font-medium hover:bg-white transition-colors text-sm md:text-base"
                 >
-                  {showVirtualTour ? 'View Photos' : '360° Tour'}
+                  {showVirtualTour ? '📷' : '360°'}
                 </button>
               )}
               <button
                 onClick={handleSaveProperty}
-                className="p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
+                className="p-1.5 md:p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
               >
-                <Heart className={`w-6 h-6 text-emerald-600 ${user?.savedProperties?.includes(property.id) ? 'fill-emerald-600' : ''}`} />
+                <Heart className={`w-5 h-5 md:w-6 md:h-6 text-emerald-600 ${user?.savedProperties?.includes(property.id) ? 'fill-emerald-600' : ''}`} />
               </button>
-              <button className="p-2 bg-white/90 rounded-full hover:bg-white transition-colors">
-                <Share2 className="w-6 h-6 text-emerald-600" />
+              <button className="p-1.5 md:p-2 bg-white/90 rounded-full hover:bg-white transition-colors">
+                <Share2 className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" />
               </button>
             </div>
           </div>
 
           {/* Property Details */}
-          <div className="p-8">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="flex items-center space-x-2 text-gray-500 mb-2">
-                  <MapPin className="w-5 h-5" />
-                  <span>{property.location}, {property.district}</span>
+          <div className="p-4 md:p-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 md:mb-6 space-y-4 md:space-y-0">
+              <div className="flex-1">
+                <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-2 text-gray-500 mb-2">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="text-sm md:text-base">{property.location}, {property.district}</span>
+                  </div>
                   {property.is_premium && (
-                    <span className="bg-emerald-600 text-white px-3 py-1 rounded-full text-sm">
+                    <span className="bg-emerald-600 text-white px-2 py-1 md:px-3 md:py-1 rounded-full text-xs md:text-sm w-fit">
                       Premium
                     </span>
                   )}
                 </div>
-                <h1 className="text-3xl font-bold">{property.title}</h1>
+                <h1 className="text-xl md:text-3xl font-bold leading-tight">{property.title}</h1>
               </div>
-              <div className="text-right">
-                <div className="flex items-center justify-end space-x-1 text-gray-500 mb-2">
-                  <Eye className="w-5 h-5" />
+              <div className="flex flex-row md:flex-col md:text-right items-center md:items-end justify-between md:justify-start space-x-4 md:space-x-0">
+                <div className="flex items-center space-x-1 text-gray-500 text-sm md:text-base">
+                  <Eye className="w-4 h-4 md:w-5 md:h-5" />
                   <span>{property.views} views</span>
                 </div>
                 <div className="flex items-center space-x-1">
-                  <IndianRupee className="w-6 h-6 text-emerald-600" />
-                  <span className="text-3xl font-bold text-emerald-600">
+                  <IndianRupee className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" />
+                  <span className="text-xl md:text-3xl font-bold text-emerald-600">
                     {(property.price / 100000).toFixed(2)} Lakhs
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-              <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mb-6 md:mb-8">
+              <div className="space-y-4 md:space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Property Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h3 className="text-base md:text-lg font-semibold mb-3">Property Details</h3>
+                  <div className="grid grid-cols-2 gap-3 md:gap-4">
                     <div className="flex items-center space-x-2">
-                      <Bed className="w-5 h-5 text-gray-400" />
-                      <span>{property.bedrooms} Bedrooms</span>
+                      <Bed className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                      <span className="text-sm md:text-base">{property.bedrooms} Bedrooms</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Bath className="w-5 h-5 text-gray-400" />
-                      <span>{property.bathrooms} Bathrooms</span>
+                      <Bath className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                      <span className="text-sm md:text-base">{property.bathrooms} Bathrooms</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Square className="w-5 h-5 text-gray-400" />
-                      <span>{property.area} sq.ft</span>
+                      <Square className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                      <span className="text-sm md:text-base">{property.area} sq.ft</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Calendar className="w-5 h-5 text-gray-400" />
-                      <span>Built {property.constructionYear}</span>
+                      <Calendar className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                      <span className="text-sm md:text-base">Built {property.constructionYear}</span>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Amenities</h3>
-                  <div className="grid grid-cols-2 gap-2">
+                  <h3 className="text-base md:text-lg font-semibold mb-3">Amenities</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {property.amenities.map((amenity, index) => (
                       <div key={index} className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-emerald-600 rounded-full" />
-                        <span>{amenity}</span>
+                        <div className="w-2 h-2 bg-emerald-600 rounded-full flex-shrink-0" />
+                        <span className="text-sm md:text-base">{amenity}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-4 md:space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Nearby Places</h3>
+                  <h3 className="text-base md:text-lg font-semibold mb-3">Nearby Places</h3>
                   <div className="space-y-2">
-                    {property.nearbyPlaces.map((place, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span>{place.name}</span>
-                        <span className="text-gray-500">{place.distance} km</span>
-                      </div>
-                    ))}
+                    {property.nearbyPlaces && property.nearbyPlaces.length > 0 ? (
+                      property.nearbyPlaces.map((place, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <span className="text-sm md:text-base">{place.name}</span>
+                          <span className="text-gray-500 text-sm md:text-base">{place.distance} km</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 text-sm md:text-base">No nearby places listed</p>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Additional Info</h3>
+                  <h3 className="text-base md:text-lg font-semibold mb-3">Additional Info</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span>Energy Rating</span>
-                      <span className="font-medium">{property.energyRating}</span>
+                      <span className="text-sm md:text-base">Built Year</span>
+                      <span className="font-medium text-sm md:text-base">{property.constructionYear || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Parking Spaces</span>
-                      <span className="font-medium">{property.parkingSpaces}</span>
+                      <span className="text-sm md:text-base">Parking Available</span>
+                      <span className="font-medium text-sm md:text-base">{property.parkingSpaces ? 'Yes' : 'No'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Furnished</span>
-                      <span className="font-medium">{property.furnished ? 'Yes' : 'No'}</span>
+                      <span className="text-sm md:text-base">Furnished</span>
+                      <span className="font-medium text-sm md:text-base">{property.furnished}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Land Area</span>
-                      <span className="font-medium">{property.landArea} {property.landAreaUnit}</span>
+                      <span className="text-sm md:text-base">Land Area</span>
+                      <span className="font-medium text-sm md:text-base">{property.landArea} {property.landAreaUnit}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-6 rounded-xl">
-                <h3 className="text-lg font-semibold mb-4">Contact Agent</h3>
-                <div className="space-y-4">
+              <div className="bg-gray-50 p-4 md:p-6 rounded-xl">
+                <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Contact Agent</h3>
+                <div className="space-y-3 md:space-y-4">
                   <div className="flex flex-col space-y-1">
-                    <span className="text-gray-600 text-sm">Property ID</span>
-                    <span className="font-medium">{property.id}</span>
+                    <span className="text-gray-600 text-xs md:text-sm">Property ID</span>
+                    <span className="font-medium text-sm md:text-base break-all">{property.id}</span>
                   </div>
                   
                   <button
                     onClick={handleGetMoreDetails}
-                    className="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center space-x-2"
+                    className="w-full bg-emerald-600 text-white py-3 md:py-3 rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center space-x-2 text-sm md:text-base"
                   >
-                    <MessageCircle className="w-5 h-5" />
+                    <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
                     <span>Get More Details</span>
                   </button>
                 </div>
@@ -348,8 +354,8 @@ function PropertyDetails() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold mb-3">Description</h3>
-              <p className="text-gray-700 leading-relaxed">{property.description}</p>
+              <h3 className="text-base md:text-lg font-semibold mb-3">Description</h3>
+              <p className="text-gray-700 leading-relaxed text-sm md:text-base">{property.description}</p>
             </div>
           </div>
         </motion.div>

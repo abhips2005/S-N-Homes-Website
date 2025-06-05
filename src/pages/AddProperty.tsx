@@ -21,13 +21,24 @@ function AddProperty() {
     type: 'residential',
     amenities: [],
     features: [],
-    furnished: false,
-    landAreaUnit: 'cent'
+    furnished: 'No',
+    landAreaUnit: 'cent',
+    parkingSpaces: 0,
+    nearbyPlaces: []
   });
 
   // Form fields
   const [amenity, setAmenity] = useState('');
   const [feature, setFeature] = useState('');
+  const [nearbyPlace, setNearbyPlace] = useState('');
+
+  // Furnished options
+  const furnishedOptions = [
+    { value: 'Yes', label: 'Yes' },
+    { value: 'No', label: 'No' },
+    { value: 'Semi Furnished', label: 'Semi Furnished' },
+    { value: 'Not Applicable', label: 'Not Applicable' }
+  ];
 
   // Kerala districts
   const keralaDistricts = [
@@ -79,14 +90,16 @@ function AddProperty() {
       { field: 'area', value: property.area, label: 'Total Area' },
       { field: 'price', value: property.price, label: 'Price' },
       { field: 'landArea', value: property.landArea, label: 'Land Area' },
-      { field: 'landAreaUnit', value: property.landAreaUnit, label: 'Unit' }
+      { field: 'landAreaUnit', value: property.landAreaUnit, label: 'Unit' },
+      { field: 'furnished', value: property.furnished, label: 'Furnished Status' }
     ];
     
-    // Validate bedrooms and bathrooms only if property type is not land
+    // Validate bedrooms, bathrooms, and construction year only if property type is not land
     if (property.type !== 'land') {
       requiredFields.push(
         { field: 'bedrooms', value: property.bedrooms, label: 'Bedrooms' },
-        { field: 'bathrooms', value: property.bathrooms, label: 'Bathrooms' }
+        { field: 'bathrooms', value: property.bathrooms, label: 'Bathrooms' },
+        { field: 'constructionYear', value: property.constructionYear, label: 'Built Year' }
       );
     }
     
@@ -136,15 +149,14 @@ function AddProperty() {
         user_id: user.id,
         is_premium: false,
         status: 'available',
-        furnished: property.furnished || false,
+        furnished: property.furnished || 'No',
         coordinates: {
           latitude: 10.8505, // Default Kerala coordinates
           longitude: 76.2711
         },
-        nearbyPlaces: [],
-        energyRating: 'B',
-        constructionYear: new Date().getFullYear(),
-        parkingSpaces: property.type === 'land' ? 0 : 1
+        nearbyPlaces: property.nearbyPlaces || [],
+        constructionYear: property.constructionYear || new Date().getFullYear(),
+        parkingSpaces: property.parkingSpaces || 0
       };
 
       // Create property with images
@@ -251,6 +263,29 @@ function AddProperty() {
         features: prev.features?.filter((_, i) => i !== index)
       }));
     }
+  };
+
+  const addNearbyPlace = () => {
+    if (!nearbyPlace.trim()) return;
+    
+    const newPlace = {
+      name: nearbyPlace.trim(),
+      type: 'other' as const,
+      distance: 0
+    };
+    
+    setProperty(prev => ({
+      ...prev,
+      nearbyPlaces: [...(prev.nearbyPlaces || []), newPlace]
+    }));
+    setNearbyPlace('');
+  };
+
+  const removeNearbyPlace = (index: number) => {
+    setProperty(prev => ({
+      ...prev,
+      nearbyPlaces: prev.nearbyPlaces?.filter((_, i) => i !== index) || []
+    }));
   };
 
   // Clean up preview URLs when component unmounts
@@ -466,6 +501,57 @@ function AddProperty() {
                   />
                 </div>
               </div>
+
+              {/* Additional Property Details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Built Year {property.type !== 'land' && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="number"
+                    min="1900"
+                    max={new Date().getFullYear()}
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    value={property.constructionYear || ''}
+                    onChange={(e) => setProperty(prev => ({ ...prev, constructionYear: Number(e.target.value) }))}
+                    required={property.type !== 'land'}
+                    disabled={property.type === 'land'}
+                    placeholder="e.g., 2020"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Furnished Status <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    value={property.furnished || 'No'}
+                    onChange={(e) => setProperty(prev => ({ ...prev, furnished: e.target.value }))}
+                  >
+                    {furnishedOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Parking Available <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    value={property.parkingSpaces ? 'yes' : 'no'}
+                    onChange={(e) => setProperty(prev => ({ ...prev, parkingSpaces: e.target.value === 'yes' ? 1 : 0 }))}
+                  >
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Amenities */}
@@ -542,6 +628,48 @@ function AddProperty() {
                       type="button"
                       onClick={() => removeFeature(index)}
                       className="text-emerald-700 hover:text-emerald-900"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Nearby Places */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Nearby Places</h2>
+              <p className="text-sm text-gray-600">Add important nearby locations like schools, hospitals, shopping centers, etc.</p>
+              
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  placeholder="e.g., ABC School, XYZ Hospital, Main Market"
+                  className="flex-1 px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  value={nearbyPlace}
+                  onChange={(e) => setNearbyPlace(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addNearbyPlace())}
+                />
+                <button
+                  type="button"
+                  onClick={addNearbyPlace}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {property.nearbyPlaces?.map((place, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center space-x-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full"
+                  >
+                    <span>{place.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeNearbyPlace(index)}
+                      className="text-blue-700 hover:text-blue-900"
                     >
                       <X className="w-4 h-4" />
                     </button>
