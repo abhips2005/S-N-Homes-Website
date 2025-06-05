@@ -197,16 +197,16 @@ function AddProperty() {
         return;
       }
       
-      // Validate file sizes (max 5MB each)
-      const oversizedFiles = newImages.filter(file => file.size > 5 * 1024 * 1024);
+      // Validate file sizes (max 1MB each)
+      const oversizedFiles = newImages.filter(file => file.size > 1 * 1024 * 1024);
       if (oversizedFiles.length > 0) {
-        toast.error('Each image must be less than 5MB');
+        toast.error('Each image must be less than 1MB');
         return;
       }
       
-      // Limit total images to 10
-      if (images.length + newImages.length > 10) {
-        toast.error('Maximum 10 images allowed');
+      // Limit total images to 5
+      if (images.length + newImages.length > 5) {
+        toast.error('Maximum 5 images allowed');
         return;
       }
       
