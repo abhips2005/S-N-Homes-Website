@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
+    include: ['react-hot-toast']
   },
   server: {
     proxy: {
@@ -21,7 +22,15 @@ export default defineConfig({
   },
   build: {
     commonjsOptions: {
-      include: []
+      include: [/react-hot-toast/, /node_modules/]
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          toast: ['react-hot-toast']
+        }
+      }
     }
   }
 });
