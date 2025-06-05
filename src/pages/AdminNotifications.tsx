@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { NotificationService } from '../services/NotificationService';
-import { UserService } from '../services/UserService';
+import { UserService } from '../services/userService';
 
 interface Notification {
   id: string;
