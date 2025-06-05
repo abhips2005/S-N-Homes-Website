@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, User, Plus, Menu, X, Bell, Heart } from 'lucide-react';
+import { Search, User, Plus, Menu, X, Bell, Heart } from 'lucide-react';
 import UserMenu from './UserMenu';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -67,7 +67,11 @@ function Navbar() {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Home className={`h-8 w-8 ${shouldUseTransparentBg ? 'text-white' : 'text-emerald-600'}`} />
+                  <img 
+                    src="/icons/logo-114X114-transparent.png" 
+                    alt="S N Homes Logo" 
+                    className="h-16 w-16"
+                  />
                 </motion.div>
                 <span className={`text-xl font-bold ${shouldUseTransparentBg ? 'text-white' : 'text-gray-900'}`}>
                   S N Homes

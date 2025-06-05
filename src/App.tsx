@@ -6,6 +6,7 @@ import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import Home from './pages/Home';
 import Properties from './pages/Properties';
 import PropertyDetails from './pages/PropertyDetails';
@@ -36,6 +37,7 @@ function App() {
         <BrowserRouter>
           <div className="min-h-screen bg-gray-50 flex flex-col">
             <Navbar />
+            <PWAInstallPrompt />
             <main className="flex-grow">
               <Routes>
                 <Route path="/" element={<Home />} />

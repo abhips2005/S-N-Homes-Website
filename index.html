@@ -2,12 +2,143 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>S N Homes</title>
+    
+    <!-- Basic PWA Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#059669" />
+    <meta name="background_color" content="#ffffff" />
+    
+    <!-- App Title and Description -->
+    <title>S N Homes - Kerala Real Estate Platform</title>
+    <meta name="description" content="Discover your dream home in God's Own Country. AI-powered property recommendations and virtual tours in Kerala." />
+    <meta name="keywords" content="kerala real estate, property search, homes for sale, kerala properties, real estate platform" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://snhomes.in/" />
+    <meta property="og:title" content="S N Homes - Kerala Real Estate Platform" />
+    <meta property="og:description" content="Discover your dream home in God's Own Country. AI-powered property recommendations and virtual tours." />
+    <meta property="og:image" content="https://snhomes.in/icons/og-image.png" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://snhomes.in/" />
+    <meta property="twitter:title" content="S N Homes - Kerala Real Estate Platform" />
+    <meta property="twitter:description" content="Discover your dream home in God's Own Country. AI-powered property recommendations and virtual tours." />
+    <meta property="twitter:image" content="https://snhomes.in/icons/og-image.png" />
+    
+    <!-- Icons and Manifest -->
+    <link rel="icon" type="image/png" href="/icons/icon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/icons/icon-16x16.png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-120x120.png" />
+    <link rel="apple-touch-icon" sizes="114x114" href="/icons/icon-114x114.png" />
+    <link rel="apple-touch-icon" sizes="76x76" href="/icons/icon-76x76.png" />
+    <link rel="apple-touch-icon" sizes="72x72" href="/icons/icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="60x60" href="/icons/icon-60x60.png" />
+    <link rel="apple-touch-icon" sizes="57x57" href="/icons/icon-57x57.png" />
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- iOS Specific Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="S N Homes" />
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileColor" content="#059669" />
+    <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    
+    <!-- Security and Performance -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    
+    <!-- Preload Critical Resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://firestore.googleapis.com" />
+    <link rel="dns-prefetch" href="https://firebase.googleapis.com" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+              
+              // Check for updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New content is available, show update prompt
+                      if (confirm('New version available! Reload to update?')) {
+                        window.location.reload();
+                      }
+                    }
+                  });
+                }
+              });
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+      
+      // Handle app install prompt
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Show custom install button or banner
+        const installBanner = document.createElement('div');
+        installBanner.innerHTML = `
+          <div style="position: fixed; bottom: 20px; left: 20px; right: 20px; background: #059669; color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 1000; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <strong>Install S N Homes App</strong>
+              <br><small>Add to home screen for better experience</small>
+            </div>
+            <div>
+              <button onclick="installApp()" style="background: white; color: #059669; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; margin-right: 10px;">Install</button>
+              <button onclick="dismissInstall()" style="background: transparent; color: white; border: 1px solid white; padding: 8px 16px; border-radius: 8px;">Later</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(installBanner);
+        
+        window.installApp = () => {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('User accepted the install prompt');
+            }
+            deferredPrompt = null;
+            document.body.removeChild(installBanner);
+          });
+        };
+        
+        window.dismissInstall = () => {
+          document.body.removeChild(installBanner);
+        };
+      });
+      
+      // Track app installation
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('App was installed');
+        // You can track this event for analytics
+      });
+    </script>
   </body>
 </html>
