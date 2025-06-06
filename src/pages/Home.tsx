@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Home as HomeIcon, Building2, Map, Phone, Sparkles, Shield, IndianRupee } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useInView } from 'react-intersection-observer';
 import AIRecommendationButton from '../components/AIRecommendationButton';
 import LocationAutocomplete from '../components/LocationAutocomplete';
-import { PropertyService } from '../services/propertyService';
+import { useAvailableProperties } from '../hooks/useLazyData';
 import type { Property } from '../types';
 
 function Home() {
@@ -21,25 +21,8 @@ function Home() {
     priceRange: '',
   });
 
-  const [availableProperties, setAvailableProperties] = useState<Property[]>([]);
-
-  // Load available properties for AI recommendations
-  useEffect(() => {
-    const loadProperties = async () => {
-      try {
-        console.log('Loading properties for Home page AI recommendations...');
-        const properties = await PropertyService.getAllAvailableProperties(50); // Get 50 properties for better recommendations
-        console.log('Properties loaded successfully for Home page:', properties.length);
-        setAvailableProperties(properties);
-      } catch (error) {
-        console.error('Error loading properties for Home page:', error);
-        // Don't show error to user, just log it
-        setAvailableProperties([]);
-      }
-    };
-
-    loadProperties();
-  }, []);
+  // Load available properties for AI recommendations with caching
+  const { data: availableProperties, loading: propertiesLoading } = useAvailableProperties(30);
 
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
@@ -292,7 +275,7 @@ function Home() {
         </div>
       </div>
 
-      <AIRecommendationButton properties={availableProperties} />
+      <AIRecommendationButton properties={availableProperties || []} />
     </div>
   );
 }

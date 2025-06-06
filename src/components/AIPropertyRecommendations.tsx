@@ -24,12 +24,14 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
   
   // Form state
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedListingTypes, setSelectedListingTypes] = useState<string[]>([]);
   const [selectedBedrooms, setSelectedBedrooms] = useState<number[]>([]);
   const [selectedBathrooms, setSelectedBathrooms] = useState<number[]>([]);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   
   // Available options (derived from properties)
   const availableTypes = [...new Set(properties.map(p => p.type))];
+  const availableListingTypes = [...new Set(properties.map(p => p.propertyListingType).filter(Boolean))];
   const availableBedrooms = [...new Set(properties.filter(p => p.bedrooms).map(p => p.bedrooms as number))].sort((a, b) => a - b);
   const availableBathrooms = [...new Set(properties.filter(p => p.bathrooms).map(p => p.bathrooms as number))].sort((a, b) => a - b);
   const availableDistricts = [...new Set(properties.map(p => p.district))].sort();
@@ -59,6 +61,14 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
     );
   };
 
+  const handleListingTypeChange = (listingType: string) => {
+    setSelectedListingTypes(prev => 
+      prev.includes(listingType) 
+        ? prev.filter(t => t !== listingType) 
+        : [...prev, listingType]
+    );
+  };
+
   const handleDistrictChange = (district: string) => {
     setSelectedDistricts(prev => 
       prev.includes(district) 
@@ -69,7 +79,7 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
 
   // Handle next step
   const handleNextStep = () => {
-    if (step < 4) {
+    if (step < 5) {
       setStep(step + 1);
     } else {
       handleGetRecommendations();
@@ -89,6 +99,7 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
       setStep(1);
       setShowResults(false);
       setSelectedTypes([]);
+      setSelectedListingTypes([]);
       setSelectedBedrooms([]);
       setSelectedBathrooms([]);
       setSelectedDistricts([]);
@@ -112,6 +123,10 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
       
       if (selectedTypes.length > 0) {
         filteredProperties = filteredProperties.filter(p => selectedTypes.includes(p.type));
+      }
+      
+      if (selectedListingTypes.length > 0) {
+        filteredProperties = filteredProperties.filter(p => p.propertyListingType && selectedListingTypes.includes(p.propertyListingType));
       }
       
       if (selectedBedrooms.length > 0) {
@@ -187,10 +202,10 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
                 <>
                   {/* Progress indicator */}
                   <div className="flex justify-between mb-8">
-                    {[1, 2, 3, 4].map((s) => (
+                    {[1, 2, 3, 4, 5].map((s) => (
                       <div
                         key={s}
-                        className={`w-1/4 h-1 ${
+                        className={`w-1/5 h-1 ${
                           s <= step ? 'bg-emerald-600' : 'bg-gray-200'
                         } ${s > 1 ? 'ml-1' : ''}`}
                       />
@@ -226,8 +241,40 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
                     </div>
                   )}
 
-                  {/* Step 2: Bedrooms */}
+                  {/* Step 2: Listing Type */}
                   {step === 2 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <ArrowRight className="w-6 h-6 text-emerald-600" />
+                        <h3 className="text-lg font-semibold">Listing Type</h3>
+                      </div>
+                      <p className="text-gray-600 mb-4">
+                        Are you looking to buy, rent, or lease?
+                      </p>
+                      <div className="space-y-2">
+                        {availableListingTypes.map((listingType) => (
+                          <label
+                            key={listingType}
+                            className="flex items-center space-x-3 p-3 border rounded-xl hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedListingTypes.includes(listingType)}
+                              onChange={() => handleListingTypeChange(listingType)}
+                              className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500"
+                            />
+                            <span>
+                              {listingType === 'buy' ? 'For Sale' : 
+                               listingType === 'rent' ? 'For Rent' : 'For Lease'}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: Bedrooms */}
+                  {step === 3 && (
                     <div className="space-y-4">
                       <div className="flex items-center space-x-3 mb-4">
                         <Bed className="w-6 h-6 text-emerald-600" />
@@ -255,8 +302,8 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
                     </div>
                   )}
 
-                  {/* Step 3: Bathrooms */}
-                  {step === 3 && (
+                  {/* Step 4: Bathrooms */}
+                  {step === 4 && (
                     <div className="space-y-4">
                       <div className="flex items-center space-x-3 mb-4">
                         <Bath className="w-6 h-6 text-emerald-600" />
@@ -284,8 +331,8 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
                     </div>
                   )}
 
-                  {/* Step 4: District */}
-                  {step === 4 && (
+                  {/* Step 5: District */}
+                  {step === 5 && (
                     <div className="space-y-4">
                       <div className="flex items-center space-x-3 mb-4">
                         <MapPin className="w-6 h-6 text-emerald-600" />
@@ -330,7 +377,7 @@ const AIPropertyRecommendations: React.FC<Props> = ({ properties, isOpen, onClos
                       onClick={handleNextStep}
                       className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center space-x-2"
                     >
-                      <span>{step === 4 ? 'Get Recommendations' : 'Next'}</span>
+                      <span>{step === 5 ? 'Get Recommendations' : 'Next'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

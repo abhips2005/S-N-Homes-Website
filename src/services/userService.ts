@@ -18,6 +18,7 @@ import {
 } from 'firebase/auth';
 import { db, auth } from '../firebase-config';
 import type { User } from '../types';
+import { cacheService } from './cacheService';
 
 // Collections
 const USERS_COLLECTION = 'users';
@@ -116,7 +117,18 @@ export class UserService {
         const savedProperties = userProfile.savedProperties || [];
         if (!savedProperties.includes(propertyId)) {
           savedProperties.push(propertyId);
-          await this.updateUserProfile(userId, { savedProperties });
+                  await this.updateUserProfile(userId, { savedProperties });
+        
+        // Invalidate saved properties cache
+        cacheService.invalidateOnChange('saved_properties', userId);
+        
+        // Trigger global refresh events for real-time updates with slight delay
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('refresh-user'));
+          window.dispatchEvent(new CustomEvent('refresh-saved'));
+        }, 100);
+        
+        console.log('Property saved and cache invalidated for user:', userId);
         }
       }
     } catch (error) {
@@ -132,6 +144,17 @@ export class UserService {
       if (userProfile) {
         const savedProperties = (userProfile.savedProperties || []).filter(id => id !== propertyId);
         await this.updateUserProfile(userId, { savedProperties });
+        
+        // Invalidate saved properties cache
+        cacheService.invalidateOnChange('saved_properties', userId);
+        
+        // Trigger global refresh events for real-time updates with slight delay
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('refresh-user'));
+          window.dispatchEvent(new CustomEvent('refresh-saved'));
+        }, 100);
+        
+        console.log('Property removed and cache invalidated for user:', userId);
       }
     } catch (error) {
       console.error('Error removing saved property:', error);

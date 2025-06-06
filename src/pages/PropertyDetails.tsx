@@ -92,6 +92,11 @@ function PropertyDetails() {
       
       // Refresh user profile to get updated saved properties
       window.dispatchEvent(new CustomEvent('refreshUser'));
+      
+      // Small delay to ensure cache invalidation has processed
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refreshUser'));
+      }, 100);
     } catch (error) {
       console.error('Error saving property:', error);
       toast.error('Failed to save property');
@@ -262,22 +267,24 @@ function PropertyDetails() {
                 <div>
                   <h3 className="text-base md:text-lg font-semibold mb-3">Property Details</h3>
                   <div className="grid grid-cols-2 gap-3 md:gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Bed className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                      <span className="text-sm md:text-base">{property.bedrooms} Bedrooms</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Bath className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                      <span className="text-sm md:text-base">{property.bathrooms} Bathrooms</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Square className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                      <span className="text-sm md:text-base">{property.area} sq.ft</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                      <span className="text-sm md:text-base">Built {property.constructionYear}</span>
-                    </div>
+                    {property.type !== 'land' && (
+                      <>
+                        <div className="flex items-center space-x-2">
+                          <Bed className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                          <span className="text-sm md:text-base">{property.bedrooms} Bedrooms</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Bath className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                          <span className="text-sm md:text-base">{property.bathrooms} Bathrooms</span>
+                        </div>
+                      </>
+                    )}
+                    {property.area && (
+                      <div className="flex items-center space-x-2">
+                        <Square className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                        <span className="text-sm md:text-base">{property.area} sq.ft</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -302,7 +309,9 @@ function PropertyDetails() {
                       property.nearbyPlaces.map((place, index) => (
                         <div key={index} className="flex items-center justify-between">
                           <span className="text-sm md:text-base">{place.name}</span>
-                          <span className="text-gray-500 text-sm md:text-base">{place.distance} km</span>
+                          {place.distance && place.distance > 0 && (
+                            <span className="text-gray-500 text-sm md:text-base">{place.distance} km</span>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -314,6 +323,14 @@ function PropertyDetails() {
                 <div>
                   <h3 className="text-base md:text-lg font-semibold mb-3">Additional Info</h3>
                   <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm md:text-base">Listing Type</span>
+                      <span className="font-medium text-sm md:text-base">
+                        {property.propertyListingType === 'buy' ? 'For Sale' : 
+                         property.propertyListingType === 'rent' ? 'For Rent' : 
+                         property.propertyListingType === 'lease' ? 'For Lease' : 'For Sale'}
+                      </span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-sm md:text-base">Built Year</span>
                       <span className="font-medium text-sm md:text-base">{property.constructionYear || 'N/A'}</span>

@@ -24,11 +24,13 @@ import {
 } from 'firebase/storage';
 import { db, storage } from '../firebase-config';
 import type { Property } from '../types';
+import { cacheService } from './cacheService';
 
 export interface PropertyFilters {
   location?: string;
   district?: string;
   type?: string;
+  propertyListingType?: string;
   minPrice?: number;
   maxPrice?: number;
   bedrooms?: number;
@@ -66,7 +68,6 @@ export class PropertyService {
       
       const newProperty: Omit<Property, 'id'> = {
         ...propertyData,
-        property_id: propertyId,
         images: imageUrls,
         created_at: serverTimestamp() as any,
         views: 0,
@@ -74,8 +75,12 @@ export class PropertyService {
       };
 
       console.log('Attempting to create property document:', newProperty);
-      const docRef = await addDoc(collection(db, PROPERTIES_COLLECTION), newProperty);
+      const docRef =       await addDoc(collection(db, PROPERTIES_COLLECTION), newProperty);
       console.log('Property created with ID:', docRef.id);
+      
+      // Invalidate relevant caches
+      cacheService.invalidateOnChange('property_create');
+      
       return docRef.id;
     } catch (error) {
       console.error('Error creating property:', error);
@@ -91,18 +96,24 @@ export class PropertyService {
   // Get property by ID
   static async getPropertyById(id: string): Promise<Property | null> {
     try {
-      const docRef = doc(db, PROPERTIES_COLLECTION, id);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as Property;
-      }
-      return null;
+      return await cacheService.getOrFetch(
+        `property_${id}`,
+        async () => {
+          const docRef = doc(db, PROPERTIES_COLLECTION, id);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              ...data,
+              created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
+            } as Property;
+          }
+          return null;
+        },
+        2 * 60 * 1000 // 2 minutes cache for individual properties
+      );
     } catch (error) {
       console.error('Error getting property:', error);
       throw new Error('Failed to get property');
@@ -131,6 +142,9 @@ export class PropertyService {
 
       await updateDoc(docRef, updateData);
       console.log('Property updated successfully');
+      
+      // Invalidate relevant caches
+      cacheService.invalidateOnChange('property_update', id);
     } catch (error) {
       console.error('Error updating property:', error);
       throw new Error('Failed to update property');
@@ -152,6 +166,9 @@ export class PropertyService {
       const docRef = doc(db, PROPERTIES_COLLECTION, id);
       await deleteDoc(docRef);
       console.log('Property deleted successfully');
+      
+      // Invalidate relevant caches
+      cacheService.invalidateOnChange('property_delete', id);
     } catch (error) {
       console.error('Error deleting property:', error);
       throw new Error('Failed to delete property');
@@ -211,6 +228,11 @@ export class PropertyService {
         filteredProperties = filteredProperties.filter(p => p.district === filters.district);
       }
       
+      // Filter by property listing type
+      if (filters.propertyListingType) {
+        filteredProperties = filteredProperties.filter(p => p.propertyListingType === filters.propertyListingType);
+      }
+      
       // Filter by location (partial match)
       if (filters.location) {
         filteredProperties = filteredProperties.filter(p => 
@@ -220,7 +242,7 @@ export class PropertyService {
       
       // Filter by bedrooms
       if (filters.bedrooms) {
-        filteredProperties = filteredProperties.filter(p => p.bedrooms >= filters.bedrooms!);
+        filteredProperties = filteredProperties.filter(p => p.bedrooms && p.bedrooms >= filters.bedrooms!);
       }
       
       // Filter by price range
@@ -243,7 +265,13 @@ export class PropertyService {
       
       // Filter by furnished
       if (filters.furnished !== undefined) {
-        filteredProperties = filteredProperties.filter(p => p.furnished === filters.furnished);
+        filteredProperties = filteredProperties.filter(p => {
+          if (filters.furnished === true) {
+            return p.furnished === 'Yes' || p.furnished === 'Semi Furnished';
+          } else {
+            return p.furnished === 'No' || p.furnished === 'Not Applicable';
+          }
+        });
       }
 
       // Apply sorting client-side
@@ -286,41 +314,47 @@ export class PropertyService {
   // Get properties by user ID
   static async getPropertiesByUser(userId: string): Promise<Property[]> {
     try {
-      console.log('Getting properties for user:', userId);
-      
-      // Use simple query to get all properties, then filter client-side
-      // This avoids needing composite indexes
-      const q = query(
-        collection(db, PROPERTIES_COLLECTION),
-        limit(100) // Get more to account for filtering
+      return await cacheService.getOrFetch(
+        `user_properties_${userId}`,
+        async () => {
+          console.log('Getting properties for user:', userId);
+          
+          // Use simple query to get all properties, then filter client-side
+          // This avoids needing composite indexes
+          const q = query(
+            collection(db, PROPERTIES_COLLECTION),
+            limit(100) // Get more to account for filtering
+          );
+          
+          const querySnapshot = await getDocs(q);
+          console.log('Query executed successfully. Documents found:', querySnapshot.size);
+          
+          const allProperties: Property[] = [];
+
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            allProperties.push({
+              id: doc.id,
+              ...data,
+              created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
+            } as Property);
+          });
+
+          // Filter by user ID client-side
+          const userProperties = allProperties.filter(property => property.user_id === userId);
+          
+          // Sort by creation date client-side
+          userProperties.sort((a, b) => {
+            const dateA = new Date(a.created_at).getTime();
+            const dateB = new Date(b.created_at).getTime();
+            return dateB - dateA; // Descending order (newest first)
+          });
+
+          console.log('User properties found:', userProperties.length);
+          return userProperties;
+        },
+        3 * 60 * 1000 // 3 minutes cache for user properties
       );
-      
-      const querySnapshot = await getDocs(q);
-      console.log('Query executed successfully. Documents found:', querySnapshot.size);
-      
-      const allProperties: Property[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        allProperties.push({
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as Property);
-      });
-
-      // Filter by user ID client-side
-      const userProperties = allProperties.filter(property => property.user_id === userId);
-      
-      // Sort by creation date client-side
-      userProperties.sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
-        return dateB - dateA; // Descending order (newest first)
-      });
-
-      console.log('User properties found:', userProperties.length);
-      return userProperties;
     } catch (error) {
       console.error('Error getting user properties:', error);
       console.error('Error details:', {
@@ -467,40 +501,46 @@ export class PropertyService {
   // Get all available properties (simple query)
   static async getAllAvailableProperties(limitCount: number = 20): Promise<Property[]> {
     try {
-      console.log('Getting all available properties...');
-      
-      // Ultra-simple query - just get all documents without complex filtering
-      const q = query(
-        collection(db, PROPERTIES_COLLECTION),
-        limit(limitCount)
+      return await cacheService.getOrFetch(
+        `all_properties_${limitCount}`,
+        async () => {
+          console.log('Getting all available properties...');
+          
+          // Ultra-simple query - just get all documents without complex filtering
+          const q = query(
+            collection(db, PROPERTIES_COLLECTION),
+            limit(limitCount)
+          );
+
+          const querySnapshot = await getDocs(q);
+          console.log('Ultra-simple query executed successfully. Documents found:', querySnapshot.size);
+          
+          const properties: Property[] = [];
+
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Filter available properties on client side
+            if (data.status === 'available') {
+              properties.push({
+                id: doc.id,
+                ...data,
+                created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
+              } as Property);
+            }
+          });
+
+          // Sort by creation date on client side
+          properties.sort((a, b) => {
+            const dateA = new Date(a.created_at).getTime();
+            const dateB = new Date(b.created_at).getTime();
+            return dateB - dateA; // Descending order (newest first)
+          });
+
+          console.log('Available properties loaded:', properties.length);
+          return properties;
+        },
+        2 * 60 * 1000 // 2 minutes cache for available properties list
       );
-
-      const querySnapshot = await getDocs(q);
-      console.log('Ultra-simple query executed successfully. Documents found:', querySnapshot.size);
-      
-      const properties: Property[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Filter available properties on client side
-        if (data.status === 'available') {
-          properties.push({
-            id: doc.id,
-            ...data,
-            created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-          } as Property);
-        }
-      });
-
-      // Sort by creation date on client side
-      properties.sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
-        return dateB - dateA; // Descending order (newest first)
-      });
-
-      console.log('Available properties loaded:', properties.length);
-      return properties;
     } catch (error) {
       console.error('Error getting available properties:', error);
       throw new Error(`Failed to get available properties: ${(error as any)?.message || 'Unknown error'}`);

@@ -10,6 +10,7 @@ import { PropertyService, PropertyFilters } from '../services/propertyService';
 import { UserService } from '../services/userService';
 import type { Property } from '../types';
 import toast from 'react-hot-toast';
+import { useRealTimeData } from '../hooks/useRealTimeData';
 
 function Properties() {
   const { user } = useAuth();
@@ -30,6 +31,23 @@ function Properties() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [lastDoc, setLastDoc] = useState<any>(null);
+  const [userDataRefreshKey, setUserDataRefreshKey] = useState(0);
+  const [localSavedState, setLocalSavedState] = useState<{[key: string]: boolean}>({});
+
+  // Real-time user data refresh - triggers re-render when user data changes
+  useRealTimeData(() => {
+    setUserDataRefreshKey(prev => prev + 1);
+    // Dispatch event to refresh user in AuthContext
+    window.dispatchEvent(new CustomEvent('refreshUser'));
+  }, ['user', 'saved']);
+
+  // Watch for changes in user's saved properties and trigger re-render
+  useEffect(() => {
+    if (user?.savedProperties) {
+      console.log('User saved properties changed:', user.savedProperties.length, 'properties');
+      setUserDataRefreshKey(prev => prev + 1);
+    }
+  }, [user?.savedProperties]);
 
   // Load properties
   const loadProperties = async (reset = false) => {
@@ -93,6 +111,12 @@ function Properties() {
       return;
     }
 
+    // Immediate UI update for better user experience
+    setLocalSavedState(prev => ({
+      ...prev,
+      [propertyId]: !isSaved
+    }));
+
     try {
       if (isSaved) {
         await UserService.removeSavedProperty(user.id, propertyId);
@@ -101,9 +125,29 @@ function Properties() {
         await UserService.addSavedProperty(user.id, propertyId);
         toast.success('Property saved successfully');
       }
+      
+      // Trigger user data refresh for all components
+      setUserDataRefreshKey(prev => prev + 1);
+      window.dispatchEvent(new CustomEvent('refreshUser'));
+      
+      // Clear local state after server update is complete
+      setTimeout(() => {
+        setLocalSavedState(prev => {
+          const newState = { ...prev };
+          delete newState[propertyId];
+          return newState;
+        });
+      }, 1000);
+      
     } catch (error) {
       console.error('Error saving property:', error);
       toast.error('Failed to save property');
+      
+      // Revert local state on error
+      setLocalSavedState(prev => ({
+        ...prev,
+        [propertyId]: isSaved
+      }));
     }
   };
 
@@ -170,6 +214,17 @@ function Properties() {
               <option value="flat">Flat</option>
               <option value="villa">Villa</option>
               <option value="land">Land</option>
+            </select>
+
+            <select
+              className="px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              value={filters.propertyListingType || ''}
+              onChange={(e) => handleFilterChange('propertyListingType', e.target.value || undefined)}
+            >
+              <option value="">All Listings</option>
+              <option value="buy">For Sale</option>
+              <option value="rent">For Rent</option>
+              <option value="lease">For Lease</option>
             </select>
 
             <select
@@ -252,7 +307,7 @@ function Properties() {
         >
           {properties.map((property) => (
             <motion.div
-              key={property.id}
+              key={`${property.id}-${userDataRefreshKey}`}
               variants={itemVariants}
                   className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
                   onClick={() => handlePropertyClick(property.id)}
@@ -263,21 +318,33 @@ function Properties() {
                     alt={property.title}
                     className="w-full h-64 object-cover"
                   />
-                  {property.is_premium && (
-                    <div className="absolute top-4 left-4 bg-emerald-600 text-white px-3 py-1 rounded-full text-sm">
-                      Premium
+                  <div className="absolute top-4 left-4 space-y-2">
+                    {property.is_premium && (
+                      <div className="bg-emerald-600 text-white px-3 py-1 rounded-full text-sm">
+                        Premium
+                      </div>
+                    )}
+                    <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+                      {property.propertyListingType === 'buy' ? 'For Sale' : 
+                       property.propertyListingType === 'rent' ? 'For Rent' : 
+                       property.propertyListingType === 'lease' ? 'For Lease' : 'For Sale'}
                     </div>
-                  )}
+                  </div>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSaveProperty(property.id, user?.savedProperties?.includes(property.id) || false);
+                        const isCurrentlySaved = localSavedState[property.id] !== undefined 
+                          ? localSavedState[property.id] 
+                          : user?.savedProperties?.includes(property.id) || false;
+                        handleSaveProperty(property.id, isCurrentlySaved);
                       }}
                       className="absolute top-4 right-4 p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
                     >
                       <Heart 
-                        className={`w-5 h-5 ${
-                          user?.savedProperties?.includes(property.id) 
+                        className={`w-5 h-5 transition-colors ${
+                          (localSavedState[property.id] !== undefined 
+                            ? localSavedState[property.id] 
+                            : user?.savedProperties?.includes(property.id))
                             ? 'text-red-500 fill-current' 
                             : 'text-emerald-600'
                         }`} 

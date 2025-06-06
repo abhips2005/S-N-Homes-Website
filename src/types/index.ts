@@ -4,6 +4,7 @@ export interface Property {
   description: string;
   price: number;
   type: 'residential' | 'commercial' | 'flat' | 'villa' | 'land';
+  propertyListingType?: 'buy' | 'rent' | 'lease';
   location: string;
   district: string;
   bedrooms?: number;
@@ -63,6 +64,7 @@ export interface User {
 export interface PropertySearch {
   location?: string;
   type?: string;
+  propertyListingType?: string;
   minPrice?: number;
   maxPrice?: number;
   bedrooms?: number;

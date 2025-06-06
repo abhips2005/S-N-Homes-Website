@@ -49,6 +49,12 @@ export class AIRecommendationService {
           matchingCriteria.push(`${property.bathrooms} bathrooms`);
         }
         
+        // Listing type preference (assume user prefers buying over renting/leasing)
+        if (property.propertyListingType === 'buy') {
+          score += 0.05;
+          matchingCriteria.push('For sale');
+        }
+        
         // Premium property bonus
         if (property.is_premium) {
           score += 0.1;
@@ -89,7 +95,10 @@ export class AIRecommendationService {
     
     // Add price-based reason
     const priceInLakhs = (property.price / 100000).toFixed(2);
-    reasons.push(`Competitively priced at ₹${priceInLakhs} Lakhs`);
+    const listingTypeText = property.propertyListingType === 'buy' ? 'priced for sale' : 
+                           property.propertyListingType === 'rent' ? 'available for rent' : 
+                           property.propertyListingType === 'lease' ? 'available for lease' : 'priced for sale';
+    reasons.push(`Competitively ${listingTypeText} at ₹${priceInLakhs} Lakhs`);
     
     return reasons;
   }

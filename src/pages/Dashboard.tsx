@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Home, Eye, Heart, Bell, Clock, Calendar, MapPin, IndianRupee, ArrowRight, List } from 'lucide-react';
@@ -20,10 +20,12 @@ const Dashboard: React.FC = () => {
     return tab === 'messages' ? 'overview' : tab;
   });
   const [userListingsCount, setUserListingsCount] = useState(0);
+  const [userListings, setUserListings] = useState<Property[]>([]);
   const [recentProperties, setRecentProperties] = useState<Property[]>([]);
   const [allAvailableProperties, setAllAvailableProperties] = useState<Property[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [viewedProperties, setViewedProperties] = useState<Property[]>([]);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -35,52 +37,30 @@ const Dashboard: React.FC = () => {
     }
   }, [user, loading, isAdmin, navigate]);
 
-  useEffect(() => {
-    // Update URL when tab changes
-    setSearchParams({ tab: activeTab });
-  }, [activeTab, setSearchParams]);
-
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
-    }
-  }, [user]);
-
-  // Listen for user refresh events to reload dashboard data
-  useEffect(() => {
-    const handleUserRefresh = () => {
-      if (user) {
-        loadDashboardData();
-      }
-    };
-
-    window.addEventListener('refreshUser', handleUserRefresh);
-    return () => window.removeEventListener('refreshUser', handleUserRefresh);
-  }, [user]);
-
-  const loadDashboardData = async () => {
-    if (!user) return;
+  const loadDashboardData = useCallback(async () => {
+    if (!user || loadingRef.current) return;
     
     try {
+      loadingRef.current = true;
       setLoadingStats(true);
       console.log('Starting to load dashboard data for user:', user.id);
       
-      // Load user's property count
+      // Load user's properties
       console.log('Loading user properties...');
       const userProperties = await PropertyService.getPropertiesByUser(user.id);
       console.log('User properties loaded successfully:', userProperties.length);
       setUserListingsCount(userProperties.length);
+      setUserListings(userProperties);
       
-      // Load recent properties for recommendations using simple query
-      console.log('Loading recent properties...');
-      const recentProps = await PropertyService.getAllAvailableProperties(4);
-      console.log('Recent properties loaded successfully:', recentProps.length);
+      // Load properties for both recent display and AI recommendations
+      console.log('Loading properties for recent display and recommendations...');
+      const allProps = await PropertyService.getAllAvailableProperties(25); // Get properties for both recent and recommendations
+      console.log('Properties loaded successfully:', allProps.length);
+      
+      // Use first 4 for recent properties display
+      const recentProps = allProps.slice(0, 4);
+      console.log('Recent properties extracted:', recentProps.length);
       setRecentProperties(recentProps);
-      
-      // Load all available properties for AI recommendations
-      console.log('Loading all available properties for recommendations...');
-      const allProps = await PropertyService.getAllAvailableProperties(100); // Get more properties for better recommendations
-      console.log('All available properties loaded successfully:', allProps.length);
       setAllAvailableProperties(allProps);
       
       // Load recently viewed properties from user's viewing history
@@ -121,8 +101,32 @@ const Dashboard: React.FC = () => {
       // Don't show toast error for dashboard data loading - just log it
     } finally {
       setLoadingStats(false);
+      loadingRef.current = false;
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    // Update URL when tab changes
+    setSearchParams({ tab: activeTab });
+  }, [activeTab, setSearchParams]);
+
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user, loadDashboardData]);
+
+  // Listen for user refresh events to reload dashboard data
+  useEffect(() => {
+    const handleUserRefresh = () => {
+      if (user) {
+        loadDashboardData();
+      }
+    };
+
+    window.addEventListener('refreshUser', handleUserRefresh);
+    return () => window.removeEventListener('refreshUser', handleUserRefresh);
+  }, [loadDashboardData]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -303,7 +307,7 @@ const Dashboard: React.FC = () => {
 
         {activeTab === 'listings' && (
           <div className="mb-8">
-            <UserListings />
+            <UserListings preloadedListings={userListings} isLoading={loadingStats} />
           </div>
         )}
       </div>

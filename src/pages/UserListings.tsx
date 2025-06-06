@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Edit2, Trash2, Plus, Eye, Check, X } from 'lucide-react';
@@ -7,29 +7,32 @@ import { PropertyService } from '../services/propertyService';
 import toast from 'react-hot-toast';
 import type { Property } from '../types';
 
-const UserListings: React.FC = () => {
+interface UserListingsProps {
+  preloadedListings?: Property[];
+  isLoading?: boolean;
+}
+
+const UserListings: React.FC<UserListingsProps> = ({ preloadedListings, isLoading: parentLoading }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [listings, setListings] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
+  const loadingRef = useRef(false);
+  const dataLoadedRef = useRef(false);
 
-  useEffect(() => {
-    if (user) {
-      loadUserListings();
-    }
-  }, [user]);
-
-  const loadUserListings = async () => {
-    if (!user) return;
+  const loadUserListings = useCallback(async () => {
+    if (!user || loadingRef.current || dataLoadedRef.current) return;
     
     try {
+      loadingRef.current = true;
       setLoading(true);
       console.log('Loading user listings for user:', user.id);
       const userProperties = await PropertyService.getPropertiesByUser(user.id);
       console.log('User properties loaded successfully:', userProperties.length);
       setListings(userProperties);
+      dataLoadedRef.current = true;
     } catch (error) {
       console.error('Error loading user listings:', error);
       console.error('Error details:', {
@@ -40,8 +43,21 @@ const UserListings: React.FC = () => {
       toast.error('Failed to load your listings');
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
-  };
+  }, [user]);
+
+  // Use preloaded data if available, otherwise load from API
+  useEffect(() => {
+    if (preloadedListings && preloadedListings.length >= 0) {
+      console.log('Using preloaded listings data:', preloadedListings.length);
+      setListings(preloadedListings);
+      setLoading(parentLoading || false);
+      dataLoadedRef.current = true;
+    } else if (user && !dataLoadedRef.current) {
+      loadUserListings();
+    }
+  }, [user, loadUserListings, preloadedListings, parentLoading]);
 
   const handleCreateListing = () => {
     navigate('/add-property');
@@ -70,6 +86,7 @@ const UserListings: React.FC = () => {
       toast.success('Property listing deleted');
       setShowDeleteModal(false);
       setPropertyToDelete(null);
+      // Don't need to reload data since we updated the state directly
     } catch (error) {
       console.error('Error deleting property:', error);
       toast.error('Failed to delete property');

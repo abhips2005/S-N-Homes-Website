@@ -22,6 +22,7 @@ function EditProperty() {
   // Form state
   const [property, setProperty] = useState<Partial<Property>>({
     type: 'residential',
+    propertyListingType: 'buy',
     amenities: [],
     images: [],
     features: [],
@@ -56,6 +57,13 @@ function EditProperty() {
     { value: 'flat', label: 'Flat' },
     { value: 'villa', label: 'Villa' },
     { value: 'land', label: 'Land Only' }
+  ];
+
+  // Property listing types
+  const propertyListingTypes = [
+    { value: 'buy', label: 'For Sale' },
+    { value: 'rent', label: 'For Rent' },
+    { value: 'lease', label: 'For Lease' }
   ];
   
   // Load property data
@@ -111,8 +119,11 @@ function EditProperty() {
     e.preventDefault();
     
     // Validate required fields
-    if (!property.title || !property.type || !property.location || 
-        !property.district || !property.area || !property.price) {
+    const requiredFieldsValid = property.title && property.type && property.location && 
+                                property.district && property.price &&
+                                (property.type === 'land' || property.area);
+    
+    if (!requiredFieldsValid) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -139,11 +150,12 @@ function EditProperty() {
         description: property.description,
         price: Number(property.price),
         type: property.type,
+        propertyListingType: property.propertyListingType || 'buy',
         location: property.location,
         district: property.district,
         bedrooms: Number(property.bedrooms),
         bathrooms: Number(property.bathrooms),
-        area: Number(property.area),
+        area: property.type !== 'land' ? Number(property.area) : 0,
         landArea: Number(property.landArea) || 0,
         landAreaUnit: property.landAreaUnit || 'cent',
         amenities: property.amenities || [],
@@ -295,6 +307,24 @@ function EditProperty() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Listing Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    value={property.propertyListingType}
+                    onChange={(e) => setProperty(prev => ({ ...prev, propertyListingType: e.target.value as Property['propertyListingType'] }))}
+                  >
+                    {propertyListingTypes.map(listingType => (
+                      <option key={listingType.value} value={listingType.value}>{listingType.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description <span className="text-red-500">*</span>
@@ -378,18 +408,20 @@ function EditProperty() {
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Area (sq.ft) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    value={property.area || ''}
-                    onChange={(e) => setProperty(prev => ({ ...prev, area: Number(e.target.value) }))}
-                  />
-                </div>
+                {property.type !== 'land' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total Area (sq.ft) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      value={property.area || ''}
+                      onChange={(e) => setProperty(prev => ({ ...prev, area: Number(e.target.value) }))}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

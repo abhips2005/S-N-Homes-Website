@@ -8,6 +8,7 @@ import type { Property } from '../types';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { PropertyService } from '../services/propertyService';
 import { NotificationService } from '../services/NotificationService';
+import imageCompression from 'browser-image-compression';
 
 function AddProperty() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ function AddProperty() {
   // Form state
   const [property, setProperty] = useState<Partial<Property>>({
     type: 'residential',
+    propertyListingType: 'buy',
     amenities: [],
     features: [],
     furnished: 'No',
@@ -67,6 +69,13 @@ function AddProperty() {
     { value: 'land', label: 'Land Only' }
   ];
 
+  // Property listing types
+  const propertyListingTypes = [
+    { value: 'buy', label: 'For Sale' },
+    { value: 'rent', label: 'For Rent' },
+    { value: 'lease', label: 'For Lease' }
+  ];
+
   // Add new location handler for the OSM component
   const handleLocationChange = (location: string) => {
     setProperty(prev => ({ ...prev, location }));
@@ -84,15 +93,20 @@ function AddProperty() {
     const requiredFields = [
       { field: 'title', value: property.title, label: 'Property Title' },
       { field: 'type', value: property.type, label: 'Property Type' },
+      { field: 'propertyListingType', value: property.propertyListingType, label: 'Listing Type' },
       { field: 'description', value: property.description, label: 'Description' },
       { field: 'location', value: property.location, label: 'Location' },
       { field: 'district', value: property.district, label: 'District' },
-      { field: 'area', value: property.area, label: 'Total Area' },
       { field: 'price', value: property.price, label: 'Price' },
       { field: 'landArea', value: property.landArea, label: 'Land Area' },
       { field: 'landAreaUnit', value: property.landAreaUnit, label: 'Unit' },
       { field: 'furnished', value: property.furnished, label: 'Furnished Status' }
     ];
+
+    // Add area requirement only for non-land properties
+    if (property.type !== 'land') {
+      requiredFields.push({ field: 'area', value: property.area, label: 'Total Area' });
+    }
     
     // Validate bedrooms, bathrooms, and construction year only if property type is not land
     if (property.type !== 'land') {
@@ -113,7 +127,7 @@ function AddProperty() {
     
     // Validate numeric fields are positive
     if ((property.price && property.price <= 0) ||
-        (property.area && property.area <= 0) ||
+        (property.type !== 'land' && property.area && property.area <= 0) ||
         (property.landArea && property.landArea <= 0) ||
         (property.type !== 'land' && property.bedrooms && property.bedrooms <= 0) ||
         (property.type !== 'land' && property.bathrooms && property.bathrooms <= 0)) {
@@ -136,11 +150,12 @@ function AddProperty() {
         description: property.description || '',
         price: property.price || 0,
         type: property.type as any || 'residential',
+        propertyListingType: (property.propertyListingType as any) || 'buy',
         location: property.location || '',
         district: property.district || '',
         bedrooms: property.bedrooms || 0,
         bathrooms: property.bathrooms || 0,
-        area: property.area || 0,
+        area: property.type !== 'land' ? (property.area || 0) : 0,
         landArea: property.landArea || 0,
         landAreaUnit: property.landAreaUnit || 'cent',
         images: [], // Will be filled by the service
@@ -183,7 +198,7 @@ function AddProperty() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
       const newImages = Array.from(files);
@@ -197,24 +212,62 @@ function AddProperty() {
         return;
       }
       
-      // Validate file sizes (max 1MB each)
-      const oversizedFiles = newImages.filter(file => file.size > 1 * 1024 * 1024);
-      if (oversizedFiles.length > 0) {
-        toast.error('Each image must be less than 1MB');
-        return;
-      }
-      
       // Limit total images to 5
       if (images.length + newImages.length > 5) {
         toast.error('Maximum 5 images allowed');
         return;
       }
       
-      setImages(prev => [...prev, ...newImages]);
-      
-      // Create preview URLs
-      const newImageUrls = newImages.map(file => URL.createObjectURL(file));
-      setImagePreviewUrls(prev => [...prev, ...newImageUrls]);
+              try {
+          toast.loading('Processing images...', { id: 'processing' });
+          
+          // Compression options
+          const options = {
+            maxSizeMB: 0.5, // 500KB
+            maxWidthOrHeight: 1920,
+            useWebWorker: true,
+            fileType: 'image/jpeg' as const,
+            quality: 0.8
+          };
+          
+          // Compress all images
+          const compressedImages = await Promise.all(
+            newImages.map(async (file) => {
+              try {
+                const compressedFile = await imageCompression(file, options);
+                
+                // Create a new File object with the original name but compressed data
+                return new File([compressedFile], file.name, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+              } catch (error) {
+                console.error('Error processing image:', file.name, error);
+                toast.error(`Failed to process ${file.name}`);
+                return null;
+              }
+            })
+          );
+          
+          // Filter out failed compressions
+          const validCompressedImages = compressedImages.filter(img => img !== null) as File[];
+          
+          if (validCompressedImages.length > 0) {
+            setImages(prev => [...prev, ...validCompressedImages]);
+            
+            // Create preview URLs
+            const newImageUrls = validCompressedImages.map(file => URL.createObjectURL(file));
+            setImagePreviewUrls(prev => [...prev, ...newImageUrls]);
+            
+            toast.success(`${validCompressedImages.length} image(s) added successfully!`, { id: 'processing' });
+          } else {
+            toast.error('Failed to process any images', { id: 'processing' });
+          }
+          
+        } catch (error) {
+          console.error('Error during image processing:', error);
+          toast.error('Failed to process images. Please try again.', { id: 'processing' });
+        }
     }
   };
 
@@ -362,6 +415,24 @@ function AddProperty() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Listing Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    value={property.propertyListingType}
+                    onChange={(e) => setProperty(prev => ({ ...prev, propertyListingType: e.target.value as Property['propertyListingType'] }))}
+                  >
+                    {propertyListingTypes.map(listingType => (
+                      <option key={listingType.value} value={listingType.value}>{listingType.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description <span className="text-red-500">*</span>
@@ -445,18 +516,20 @@ function AddProperty() {
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Area (sq.ft) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    value={property.area || ''}
-                    onChange={(e) => setProperty(prev => ({ ...prev, area: Number(e.target.value) }))}
-                  />
-                </div>
+                {property.type !== 'land' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total Area (sq.ft) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      value={property.area || ''}
+                      onChange={(e) => setProperty(prev => ({ ...prev, area: Number(e.target.value) }))}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -697,6 +770,9 @@ function AddProperty() {
                       onChange={handleImageUpload}
                     />
                   </label>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Maximum 5 images • JPEG, PNG, WebP accepted
+                  </p>
                 </div>
               </div>
 
@@ -722,14 +798,7 @@ function AddProperty() {
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Property Images <span className="text-red-500">*</span>
-              </label>
-              <p className="text-sm text-gray-600 mb-2">
-                Upload up to 10 images (JPEG, PNG, WebP). Maximum 5MB each.
-              </p>
-            </div>
+
 
             <button
               type="submit"
