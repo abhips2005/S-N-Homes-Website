@@ -4,12 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, EyeOff, Eye, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  signInWithEmailAndPassword, 
-  GoogleAuthProvider, 
-  signInWithPopup 
-} from 'firebase/auth';
-import { auth } from '../firebase-config';
+import { AuthService } from '../services/authService';
 import { UserService } from '../services/userService';
 
 const Login: React.FC = () => {
@@ -46,22 +41,14 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Real Firebase authentication
-      await signInWithEmailAndPassword(auth, email, password);
-      
-      // The AuthContext will handle loading the user profile from Firestore
-      // Set flag to indicate we just logged in
+      const authSvc = new AuthService();
+      await authSvc.login(email, password);
+      // AuthContext onAuthStateChange will load the profile automatically
       setJustLoggedIn(true);
       toast.success('Login successful!');
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        toast.error('Invalid email or password');
-      } else if (error.code === 'auth/invalid-credential') {
-        toast.error('Invalid email or password');
-      } else {
-        toast.error(error.message || 'Failed to login');
-      }
+      toast.error(error.message || 'Failed to login');
     } finally {
       setIsLoading(false);
     }
@@ -70,23 +57,13 @@ const Login: React.FC = () => {
   const handleGoogleLogin = async () => {
     try {
       setIsGoogleLoading(true);
-      
-      // Real Google authentication
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      
-      // The AuthContext will handle the rest via onAuthStateChanged
-      // Set flag to indicate we just logged in
-      setJustLoggedIn(true);
-      toast.success('Google login successful!');
+      // Supabase OAuth is redirect-based — page will navigate away and return
+      const authSvc = new AuthService();
+      await authSvc.signInWithGoogle();
+      // The redirect will happen; state will be restored by Supabase on return
     } catch (error: any) {
       console.error('Google login error:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        toast.error('Sign-in cancelled. Please try again.');
-      } else {
-        toast.error(error.message || 'Failed to login with Google');
-      }
-    } finally {
+      toast.error(error.message || 'Failed to login with Google');
       setIsGoogleLoading(false);
     }
   };

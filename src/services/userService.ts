@@ -1,27 +1,8 @@
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  serverTimestamp
-} from 'firebase/firestore';
-import { 
-  createUserWithEmailAndPassword,
-  updateProfile,
-  deleteUser as deleteAuthUser
-} from 'firebase/auth';
-import { db, auth } from '../firebase-config';
+import { supabase } from '../supabase-config';
 import type { User } from '../types';
 import { cacheService } from './cacheService';
 
-// Collections
-const USERS_COLLECTION = 'users';
+const USERS_TABLE = 'users';
 
 export interface UserProfile extends Omit<User, 'id'> {
   phoneVerified?: boolean;
@@ -30,26 +11,28 @@ export interface UserProfile extends Omit<User, 'id'> {
 }
 
 export class UserService {
-  
-  // Create user profile in Firestore (called after Firebase Auth registration)
+
+  // ── Create user profile in Supabase (called after sign-up) ────────────────
   static async createUserProfile(userId: string, userData: Partial<UserProfile>): Promise<void> {
     try {
-      const userProfile: UserProfile = {
+      const userProfile = {
+        id: userId,                               // Supabase UUID = auth.users.id
         name: userData.name || '',
         email: userData.email || '',
         phone: userData.phone || '',
-        phoneVerified: userData.phoneVerified || false,
+        phone_verified: userData.phoneVerified || false,
         role: userData.role || 'user',
-        created_at: serverTimestamp() as any,
-        verified: true, // Email is verified through Firebase Auth
-        savedProperties: [],
-        viewingHistory: [],
-        lastLogin: new Date().toISOString(),
-        profileImageUrl: userData.profileImageUrl || ''
+        verified: true,
+        saved_properties: [],
+        viewing_history: [],
+        last_login: new Date().toISOString(),
+        profile_image_url: userData.profileImageUrl || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
-      const docRef = doc(db, USERS_COLLECTION, userId);
-      await setDoc(docRef, userProfile);
+      const { error } = await supabase.from(USERS_TABLE).insert(userProfile);
+      if (error) throw new Error(error.message);
       console.log('User profile created:', userId);
     } catch (error) {
       console.error('Error creating user profile:', error);
@@ -57,38 +40,44 @@ export class UserService {
     }
   }
 
-  // Get user profile by ID
+  // ── Get user profile by Supabase UUID ─────────────────────────────────────
   static async getUserProfile(userId: string): Promise<User | null> {
     try {
-      const docRef = doc(db, USERS_COLLECTION, userId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as User;
+      const { data, error } = await supabase
+        .from(USERS_TABLE)
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;   // no rows
+        throw new Error(error.message);
       }
-      return null;
+
+      return data ? UserService._rowToUser(data) : null;
     } catch (error) {
       console.error('Error getting user profile:', error);
       throw new Error('Failed to get user profile');
     }
   }
 
-  // Update user profile
+  // ── Update user profile ────────────────────────────────────────────────────
   static async updateUserProfile(userId: string, updates: Partial<UserProfile>): Promise<void> {
     try {
-      const docRef = doc(db, USERS_COLLECTION, userId);
-      
-      // Remove undefined values
-      const cleanUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined)
-      );
+      // Map camelCase JS fields to snake_case DB columns
+      const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.name !== undefined)             dbUpdates.name = updates.name;
+      if (updates.email !== undefined)            dbUpdates.email = updates.email;
+      if (updates.phone !== undefined)            dbUpdates.phone = updates.phone;
+      if (updates.role !== undefined)             dbUpdates.role = updates.role;
+      if (updates.verified !== undefined)         dbUpdates.verified = updates.verified;
+      if (updates.phoneVerified !== undefined)    dbUpdates.phone_verified = updates.phoneVerified;
+      if (updates.savedProperties !== undefined)  dbUpdates.saved_properties = updates.savedProperties;
+      if (updates.viewingHistory !== undefined)   dbUpdates.viewing_history = updates.viewingHistory;
+      if (updates.profileImageUrl !== undefined)  dbUpdates.profile_image_url = updates.profileImageUrl;
 
-      await updateDoc(docRef, cleanUpdates);
+      const { error } = await supabase.from(USERS_TABLE).update(dbUpdates).eq('id', userId);
+      if (error) throw new Error(error.message);
       console.log('User profile updated:', userId);
     } catch (error) {
       console.error('Error updating user profile:', error);
@@ -96,40 +85,33 @@ export class UserService {
     }
   }
 
-  // Update last login time
+  // ── Update last login timestamp ────────────────────────────────────────────
   static async updateLastLogin(userId: string): Promise<void> {
     try {
-      const docRef = doc(db, USERS_COLLECTION, userId);
-      await updateDoc(docRef, {
-        lastLogin: new Date().toISOString()
-      });
+      await supabase.from(USERS_TABLE)
+        .update({ last_login: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', userId);
     } catch (error) {
       console.error('Error updating last login:', error);
-      // Don't throw error for login tracking failures
+      // Don't throw — login tracking is non-critical
     }
   }
 
-  // Add property to saved properties
+  // ── Saved properties ───────────────────────────────────────────────────────
   static async addSavedProperty(userId: string, propertyId: string): Promise<void> {
     try {
       const userProfile = await this.getUserProfile(userId);
-      if (userProfile) {
-        const savedProperties = userProfile.savedProperties || [];
-        if (!savedProperties.includes(propertyId)) {
-          savedProperties.push(propertyId);
-                  await this.updateUserProfile(userId, { savedProperties });
-        
-        // Invalidate saved properties cache
+      if (!userProfile) return;
+
+      const savedProperties = userProfile.savedProperties || [];
+      if (!savedProperties.includes(propertyId)) {
+        await this.updateUserProfile(userId, { savedProperties: [...savedProperties, propertyId] });
         cacheService.invalidateOnChange('saved_properties', userId);
-        
-        // Trigger global refresh events for real-time updates with slight delay
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('refresh-user'));
           window.dispatchEvent(new CustomEvent('refresh-saved'));
         }, 100);
-        
-        console.log('Property saved and cache invalidated for user:', userId);
-        }
+        console.log('Property saved for user:', userId);
       }
     } catch (error) {
       console.error('Error adding saved property:', error);
@@ -137,123 +119,84 @@ export class UserService {
     }
   }
 
-  // Remove property from saved properties
   static async removeSavedProperty(userId: string, propertyId: string): Promise<void> {
     try {
       const userProfile = await this.getUserProfile(userId);
-      if (userProfile) {
-        const savedProperties = (userProfile.savedProperties || []).filter(id => id !== propertyId);
-        await this.updateUserProfile(userId, { savedProperties });
-        
-        // Invalidate saved properties cache
-        cacheService.invalidateOnChange('saved_properties', userId);
-        
-        // Trigger global refresh events for real-time updates with slight delay
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('refresh-user'));
-          window.dispatchEvent(new CustomEvent('refresh-saved'));
-        }, 100);
-        
-        console.log('Property removed and cache invalidated for user:', userId);
-      }
+      if (!userProfile) return;
+
+      const savedProperties = (userProfile.savedProperties || []).filter(id => id !== propertyId);
+      await this.updateUserProfile(userId, { savedProperties });
+      cacheService.invalidateOnChange('saved_properties', userId);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refresh-user'));
+        window.dispatchEvent(new CustomEvent('refresh-saved'));
+      }, 100);
+      console.log('Property removed for user:', userId);
     } catch (error) {
       console.error('Error removing saved property:', error);
       throw new Error('Failed to remove saved property');
     }
   }
 
-  // Add property to viewing history
+  // ── Viewing history ────────────────────────────────────────────────────────
   static async addToViewingHistory(userId: string, propertyId: string): Promise<void> {
     try {
       const userProfile = await this.getUserProfile(userId);
-      if (userProfile) {
-        const viewingHistory = userProfile.viewingHistory || [];
-        
-        // Remove if already exists to avoid duplicates
-        const filteredHistory = viewingHistory.filter(id => id !== propertyId);
-        
-        // Add to beginning of array (most recent first)
-        filteredHistory.unshift(propertyId);
-        
-        // Keep only last 50 viewed properties
-        const limitedHistory = filteredHistory.slice(0, 50);
-        
-        await this.updateUserProfile(userId, { viewingHistory: limitedHistory });
-      }
+      if (!userProfile) return;
+
+      const filtered = (userProfile.viewingHistory || []).filter(id => id !== propertyId);
+      filtered.unshift(propertyId);
+      await this.updateUserProfile(userId, { viewingHistory: filtered.slice(0, 50) });
     } catch (error) {
       console.error('Error adding to viewing history:', error);
-      // Don't throw error for history tracking failures
+      // Non-critical — don't throw
     }
   }
 
-  // Verify phone number
+  // ── Phone verification ─────────────────────────────────────────────────────
   static async verifyPhoneNumber(userId: string): Promise<void> {
-    try {
-      await this.updateUserProfile(userId, { phoneVerified: true });
-    } catch (error) {
-      console.error('Error verifying phone number:', error);
-      throw new Error('Failed to verify phone number');
-    }
+    await this.updateUserProfile(userId, { phoneVerified: true });
   }
 
-  // Admin functions
-  
-  // Get all users (admin only)
+  // ── Admin: list all users ──────────────────────────────────────────────────
   static async getAllUsers(): Promise<User[]> {
     try {
-      const q = query(
-        collection(db, USERS_COLLECTION),
-        orderBy('created_at', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const users: User[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        users.push({
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as User);
-      });
-      
-      return users;
+      const { data, error } = await supabase
+        .from(USERS_TABLE)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(UserService._rowToUser);
     } catch (error) {
       console.error('Error getting all users:', error);
       throw new Error('Failed to get users');
     }
   }
 
-  // Get users by role
+  // ── Admin: get users by role ───────────────────────────────────────────────
   static async getUsersByRole(role: 'user' | 'agent' | 'admin'): Promise<User[]> {
     try {
-      const q = query(
-        collection(db, USERS_COLLECTION),
-        where('role', '==', role),
-        orderBy('created_at', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const users: User[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        users.push({
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as User);
-      });
-      
-      return users;
+      const { data, error } = await supabase
+        .from(USERS_TABLE)
+        .select('*')
+        .eq('role', role)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(UserService._rowToUser);
     } catch (error) {
       console.error('Error getting users by role:', error);
       throw new Error('Failed to get users by role');
     }
   }
 
-  // Create user (admin function)
+  /**
+   * Admin: create a user.
+   * Note: Creating Supabase Auth users from the browser requires a backend call
+   * because the service role key cannot be exposed to the client. This calls
+   * the backend admin API endpoint POST /api/v1/admin/users.
+   */
   static async createUser(userData: {
     name: string;
     email: string;
@@ -262,74 +205,46 @@ export class UserService {
     role: 'user' | 'agent' | 'admin';
   }): Promise<string> {
     try {
-      // Create Firebase Auth user
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        userData.email,
-        userData.password
-      );
-      
-      // Update display name
-      await updateProfile(userCredential.user, {
-        displayName: userData.name
+      const res = await fetch('/api/v1/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
       });
-      
-      // Create user profile in Firestore
-      await this.createUserProfile(userCredential.user.uid, {
-        name: userData.name,
-        email: userData.email,
-        phone: userData.phone,
-        role: userData.role,
-        phoneVerified: false
-      });
-      
-      return userCredential.user.uid;
+      const json = await res.json() as { ok: boolean; data?: { id: string }; error?: string };
+      if (!json.ok || !json.data?.id) throw new Error(json.error || 'Failed to create user');
+      return json.data.id;
     } catch (error) {
       console.error('Error creating user:', error);
       throw new Error('Failed to create user');
     }
   }
 
-  // Update user role (admin function)
+  // ── Admin: update role ─────────────────────────────────────────────────────
   static async updateUserRole(userId: string, newRole: 'user' | 'agent' | 'admin'): Promise<void> {
-    try {
-      await this.updateUserProfile(userId, { role: newRole });
-    } catch (error) {
-      console.error('Error updating user role:', error);
-      throw new Error('Failed to update user role');
-    }
+    await this.updateUserProfile(userId, { role: newRole });
   }
 
-  // Toggle user verification status (admin function)
+  // ── Admin: toggle verification ─────────────────────────────────────────────
   static async toggleUserVerification(userId: string): Promise<void> {
-    try {
-      const userProfile = await this.getUserProfile(userId);
-      if (userProfile) {
-        await this.updateUserProfile(userId, { verified: !userProfile.verified });
-      }
-    } catch (error) {
-      console.error('Error toggling user verification:', error);
-      throw new Error('Failed to toggle user verification');
+    const userProfile = await this.getUserProfile(userId);
+    if (userProfile) {
+      await this.updateUserProfile(userId, { verified: !userProfile.verified });
     }
   }
 
-  // Delete user (admin function)
+  // ── Admin: delete user (profile only — auth deletion needs backend) ────────
   static async deleteUser(userId: string): Promise<void> {
     try {
-      // Delete user profile from Firestore
-      const docRef = doc(db, USERS_COLLECTION, userId);
-      await deleteDoc(docRef);
-      
-      // Note: Deleting from Firebase Auth requires the user to be currently signed in
-      // In a real application, you'd typically use Firebase Admin SDK on the backend
-      console.log('User profile deleted from Firestore:', userId);
+      const { error } = await supabase.from(USERS_TABLE).delete().eq('id', userId);
+      if (error) throw new Error(error.message);
+      console.log('User profile deleted:', userId);
     } catch (error) {
       console.error('Error deleting user:', error);
       throw new Error('Failed to delete user');
     }
   }
 
-  // Get user statistics
+  // ── User statistics ────────────────────────────────────────────────────────
   static async getUserStats(): Promise<{
     totalUsers: number;
     totalAgents: number;
@@ -341,45 +256,35 @@ export class UserService {
       const allUsers = await this.getAllUsers();
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const stats = {
-        totalUsers: 0,
-        totalAgents: 0,
-        totalAdmins: 0,
-        verifiedUsers: 0,
-        newUsersThisMonth: 0
-      };
-      
-      allUsers.forEach(user => {
-        // Count by role
-        switch (user.role) {
-          case 'user':
-            stats.totalUsers++;
-            break;
-          case 'agent':
-            stats.totalAgents++;
-            break;
-          case 'admin':
-            stats.totalAdmins++;
-            break;
-        }
-        
-        // Count verified users
-        if (user.verified) {
-          stats.verifiedUsers++;
-        }
-        
-        // Count new users this month
-        const userCreatedAt = new Date(user.created_at);
-        if (userCreatedAt >= startOfMonth) {
-          stats.newUsersThisMonth++;
-        }
-      });
-      
+
+      const stats = { totalUsers: 0, totalAgents: 0, totalAdmins: 0, verifiedUsers: 0, newUsersThisMonth: 0 };
+      for (const u of allUsers) {
+        if (u.role === 'user')  stats.totalUsers++;
+        if (u.role === 'agent') stats.totalAgents++;
+        if (u.role === 'admin') stats.totalAdmins++;
+        if (u.verified)         stats.verifiedUsers++;
+        if (new Date(u.created_at) >= startOfMonth) stats.newUsersThisMonth++;
+      }
       return stats;
     } catch (error) {
       console.error('Error getting user stats:', error);
       throw new Error('Failed to get user statistics');
     }
   }
-} 
+
+  // ── DB row → app User type mapper ─────────────────────────────────────────
+  private static _rowToUser(row: Record<string, unknown>): User {
+    return {
+      id:              row.id as string,
+      name:            (row.name as string) || '',
+      email:           (row.email as string) || '',
+      phone:           (row.phone as string) || '',
+      role:            (row.role as User['role']) || 'user',
+      created_at:      row.created_at as string,
+      verified:        Boolean(row.verified),
+      savedProperties: (row.saved_properties as string[]) || [],
+      viewingHistory:  (row.viewing_history as string[]) || [],
+      avatar_url:      (row.profile_image_url as string) || undefined,
+    };
+  }
+}

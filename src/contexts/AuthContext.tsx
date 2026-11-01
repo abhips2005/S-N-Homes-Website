@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { User } from '../types/user';
 import { AuthService } from '../services/authService';
 import { UserService } from '../services/userService';
-import { User as FirebaseUser } from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
-  firebaseUser: FirebaseUser | null;
+  /** The raw Supabase auth user (replaces firebaseUser). */
+  firebaseUser: SupabaseAuthUser | null;
   isAdmin: boolean;
   loading: boolean;
   login: (userData: User) => void;
@@ -28,101 +29,81 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<SupabaseAuthUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const authService = new AuthService();
 
+  // ── Load from localStorage for immediate UI (before DB responds) ──────────
   useEffect(() => {
-    const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
-      setFirebaseUser(firebaseUser);
-      
-      if (firebaseUser) {
+    const storedUser = localStorage.getItem('user');
+    const storedIsAdmin = localStorage.getItem('isAdmin');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+        setIsAdmin(storedIsAdmin === 'true');
+      } catch {
+        localStorage.removeItem('user');
+        localStorage.removeItem('isAdmin');
+      }
+    }
+  }, []);
+
+  // ── Subscribe to Supabase auth state changes ─────────────────────────────
+  useEffect(() => {
+    const unsubscribe = authService.onAuthStateChanged(async (authUser) => {
+      setFirebaseUser(authUser);
+
+      if (authUser) {
         try {
-          // Get user profile from Firestore
-          const userProfile = await UserService.getUserProfile(firebaseUser.uid);
-          
+          // Fetch profile from the users table (using Supabase UUID as the user ID)
+          let userProfile = await UserService.getUserProfile(authUser.id);
+
+          if (!userProfile) {
+            // Auto-create profile for new OAuth (Google) users
+            await UserService.createUserProfile(authUser.id, {
+              name: authUser.user_metadata?.['full_name'] || authUser.user_metadata?.['name'] || '',
+              email: authUser.email || '',
+              phone: '',
+              role: 'user',
+            });
+            userProfile = await UserService.getUserProfile(authUser.id);
+          }
+
           if (userProfile) {
             setUser(userProfile);
             setIsAdmin(userProfile.role === 'admin');
-            
-            // Update last login
-            await UserService.updateLastLogin(firebaseUser.uid);
-            
-            // Store in localStorage for persistence
+            await UserService.updateLastLogin(authUser.id);
             localStorage.setItem('user', JSON.stringify(userProfile));
             localStorage.setItem('isAdmin', (userProfile.role === 'admin').toString());
-          } else {
-            // Create user profile if it doesn't exist (for existing Firebase users)
-            const newUserProfile = {
-              name: firebaseUser.displayName || '',
-              email: firebaseUser.email || '',
-              phone: '', // Will need to be updated later
-              role: 'user' as const
-            };
-            
-            await UserService.createUserProfile(firebaseUser.uid, newUserProfile);
-            
-            // Get the created profile
-            const createdProfile = await UserService.getUserProfile(firebaseUser.uid);
-            if (createdProfile) {
-              setUser(createdProfile);
-              setIsAdmin(false);
-              localStorage.setItem('user', JSON.stringify(createdProfile));
-              localStorage.setItem('isAdmin', 'false');
-            }
           }
         } catch (error) {
           console.error('Error loading user profile:', error);
         }
       } else {
-        // User logged out
         setUser(null);
         setIsAdmin(false);
         localStorage.removeItem('user');
         localStorage.removeItem('isAdmin');
       }
-      
+
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
 
-  // Load user from localStorage on initial load (for faster UI)
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedIsAdmin = localStorage.getItem('isAdmin');
-    
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-        setIsAdmin(storedIsAdmin === 'true');
-      } catch (error) {
-        console.error('Error parsing stored user:', error);
-        localStorage.removeItem('user');
-        localStorage.removeItem('isAdmin');
-      }
-    }
-  }, []);
-
-  // Listen for user refresh events
+  // ── Listen for user refresh events from other parts of the app ─────────────
   useEffect(() => {
     const handleRefreshUser = () => {
-      if (firebaseUser) {
-        refreshUserProfile();
-      }
+      if (firebaseUser) refreshUserProfile();
     };
-
     window.addEventListener('refreshUser', handleRefreshUser);
     return () => window.removeEventListener('refreshUser', handleRefreshUser);
   }, [firebaseUser]);
 
   const login = (userData: User) => {
-    if (!userData.id || !userData.email) {
-      throw new Error('Invalid user data');
-    }
-
+    if (!userData.id || !userData.email) throw new Error('Invalid user data');
     setUser(userData);
     setIsAdmin(userData.role === 'admin');
     localStorage.setItem('user', JSON.stringify(userData));
@@ -133,7 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!adminData.id || !adminData.email || adminData.role !== 'admin') {
       throw new Error('Invalid admin data');
     }
-
     setUser(adminData);
     setIsAdmin(true);
     localStorage.setItem('user', JSON.stringify(adminData));
@@ -146,7 +126,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    
     setUser(null);
     setFirebaseUser(null);
     setIsAdmin(false);
@@ -154,14 +133,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('isAdmin');
   };
 
-  const checkAuth = (): boolean => {
-    return !!user && !!firebaseUser;
-  };
+  const checkAuth = (): boolean => !!user && !!firebaseUser;
 
   const refreshUserProfile = async () => {
     if (firebaseUser) {
       try {
-        const userProfile = await UserService.getUserProfile(firebaseUser.uid);
+        const userProfile = await UserService.getUserProfile(firebaseUser.id);
         if (userProfile) {
           setUser(userProfile);
           setIsAdmin(userProfile.role === 'admin');
@@ -174,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     firebaseUser,
     isAdmin,
@@ -183,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginAsAdmin,
     logout,
     checkAuth,
-    refreshUserProfile
+    refreshUserProfile,
   };
 
   return (

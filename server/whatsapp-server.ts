@@ -1,178 +1,205 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import { chromium } from 'playwright';
-import cors from 'cors';
+/**
+ * S&N Homes — WhatsApp CRM Server
+ *
+ * Official Meta Cloud API webhook receiver + REST API for the admin dashboard.
+ * Runs on PORT (default 3001), proxied from Vite at /api.
+ *
+ * Environment variables (see .env.example):
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+ *   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN,
+ *   META_APP_SECRET, GEMINI_API_KEY, WEBSITE_BASE_URL,
+ *   OWNER_WHATSAPP_PHONE, OWNER_EMAIL, SENDGRID_API_KEY
+ */
+import 'dotenv/config';
+import express, { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { getSupabase } from './supabaseAdmin';
+import { enqueueMessage, startWorker } from './jobWorker';
+import apiRouter from './apiRoutes';
+
+// ─── Init Supabase admin (validates env vars on startup) ─────────────────────
+getSupabase();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = Number(process.env.PORT) || 3001;
 
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-    credentials: true
+// ─── Security middleware ──────────────────────────────────────────────────────
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+
+// ─── Raw body for HMAC (must be before express.json()) ───────────────────────
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path === '/api/webhooks/whatsapp' && req.method === 'POST') {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => {
+      (req as Request & { rawBody: string }).rawBody = data;
+      next();
+    });
+  } else {
+    next();
   }
 });
 
-const whatsappNamespace = io.of('/whatsapp');
+app.use(express.json({ limit: '1mb' }));
 
-whatsappNamespace.on('connection', async (socket) => {
-  console.log('Client connected:', socket.id);
+// ─── HMAC signature validator ─────────────────────────────────────────────────
+function verifyHmac(req: Request & { rawBody?: string }): boolean {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) return true; // dev: skip if no secret configured
+  const signature = req.headers['x-hub-signature-256'] as string | undefined;
+  if (!signature || !req.rawBody) return false;
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(req.rawBody)
+    .digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
 
-  let browser = null;
-  let page = null;
-  let isAuthenticated = false;
+// ─── Health check ─────────────────────────────────────────────────────────────
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    whatsapp_configured: Boolean(
+      process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID
+    ),
+    ai_configured: Boolean(process.env.GEMINI_API_KEY),
+    supabase_configured: Boolean(
+      process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ),
+    timestamp: new Date().toISOString(),
+  });
+});
 
-  const checkAuthStatus = async () => {
-    try {
-      if (!page) return false;
-      const sidePanel = await page.$('#side');
-      return !!sidePanel;
-    } catch {
-      return false;
-    }
-  };
+// ─── WhatsApp webhook verification (GET) ─────────────────────────────────────
+app.get('/api/webhooks/whatsapp', (req: Request, res: Response) => {
+  const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
+  if (mode === 'subscribe' && token === (process.env.WHATSAPP_VERIFY_TOKEN || 'my_verify_token')) {
+    console.log('[Webhook] Meta verification challenge passed');
+    res.status(200).send(challenge);
+  } else {
+    console.warn('[Webhook] Verification failed — token mismatch');
+    res.sendStatus(403);
+  }
+});
 
-  const emitStatus = (status: string) => {
-    console.log(`Status [${socket.id}]:`, status);
-    socket.emit('status', status);
-  };
+// ─── WhatsApp webhook receiver (POST) ────────────────────────────────────────
+app.post('/api/webhooks/whatsapp', async (req: Request & { rawBody?: string }, res: Response) => {
+  // Acknowledge immediately (Meta requires 200 within 1 second)
+  res.sendStatus(200);
+
+  if (!verifyHmac(req)) {
+    console.error('[Webhook] HMAC validation failed — ignoring message');
+    return;
+  }
 
   try {
-    emitStatus('Launching browser...');
-    browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox']
-    });
-    
-    page = await browser.newPage();
-    emitStatus('Browser launched');
+    const body = JSON.parse(req.rawBody || '{}');
+    const entry = body?.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
+    if (!value) return;
 
-    // Set up page error handling
-    page.on('error', error => {
-      console.error('Page error:', error);
-      emitStatus(`Error: ${error.message}`);
-    });
-
-    // Set up message monitoring
-    page.on('load', async () => {
-      if (await checkAuthStatus()) {
-        await page.evaluate(() => {
-          const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-              mutation.addedNodes.forEach((node: any) => {
-                if (node.classList?.contains('message-in')) {
-                  const text = node.querySelector('.selectable-text')?.textContent;
-                  const sender = node.querySelector('.text-token')?.textContent;
-                  if (text && sender) {
-                    window.dispatchEvent(new CustomEvent('whatsapp-message', {
-                      detail: { text, sender }
-                    }));
-                  }
-                }
-              });
-            });
-          });
-
-          observer.observe(document.querySelector('#main')!, {
-            childList: true,
-            subtree: true
-          });
-        });
-
-        // Handle incoming messages
-        await page.exposeFunction('handleWhatsAppMessage', async ({ text, sender }) => {
-          // Process message and auto-reply
-          if (text === '1') {
-            await page.type('div[contenteditable="true"]', 'Please select your preferred viewing time:\n1. Morning (9 AM - 12 PM)\n2. Afternoon (2 PM - 5 PM)');
-            await page.keyboard.press('Enter');
-          } else if (text === '2') {
-            await page.type('div[contenteditable="true"]', 'Our agent will contact you shortly. You can also reach us at: +91 1234567890');
-            await page.keyboard.press('Enter');
-          } else if (text === '3') {
-            await page.type('div[contenteditable="true"]', 'Property has been saved to your favorites! We\'ll notify you about any updates.');
-            await page.keyboard.press('Enter');
-          }
-        });
-
-        page.evaluate(() => {
-          window.addEventListener('whatsapp-message', ((event: CustomEvent) => {
-            // @ts-ignore
-            window.handleWhatsAppMessage(event.detail);
-          }) as EventListener);
-        });
-      }
-    });
-
-    // Monitor WhatsApp authentication
-    setInterval(async () => {
-      const authenticated = await checkAuthStatus();
-      if (authenticated && !isAuthenticated) {
-        isAuthenticated = true;
-        socket.emit('authenticated');
-        emitStatus('WhatsApp authenticated');
-      } else if (!authenticated && isAuthenticated) {
-        isAuthenticated = false;
-        emitStatus('WhatsApp authentication lost');
-      }
-    }, 5000);
-
-    socket.on('initialize', async () => {
-      try {
-        emitStatus('Connecting to WhatsApp...');
-        await page.goto('https://web.whatsapp.com');
-        
-        const qrCode = await page.$('canvas');
-        if (qrCode) {
-          emitStatus('Waiting for QR code scan');
-          const qrData = await qrCode.screenshot();
-          socket.emit('qr-code', qrData.toString('base64'));
+    // ── Handle delivery status updates ────────────────────────────────────────
+    if (value.statuses) {
+      for (const status of value.statuses as Array<{ id: string; status: string; timestamp: string }>) {
+        console.log('[Status]', status.id, '->', status.status);
+        try {
+          await getSupabase()
+            .from('crm_messages')
+            .update({
+              provider_status: status.status,
+              status_updated_at: new Date().toISOString(),
+            })
+            .eq('provider_message_id', status.id);
+        } catch (e) {
+          console.error('[Status update error]', e);
         }
-      } catch (error) {
-        console.error('Initialization error:', error);
-        emitStatus(`Initialization failed: ${error.message}`);
-        socket.emit('error', { message: 'Failed to initialize WhatsApp' });
       }
-    });
+      return;
+    }
 
-    socket.on('send-message', async ({ phoneNumber, message }, callback) => {
-      try {
-        if (!page) throw new Error('Browser not initialized');
+    // ── Handle inbound messages ───────────────────────────────────────────────
+    const messages: unknown[] = value.messages || [];
+    const contacts: unknown[] = value.contacts || [];
 
-        await page.goto(`https://web.whatsapp.com/send?phone=${phoneNumber}`);
-        await page.waitForSelector('#main', { timeout: 30000 });
-        
-        await page.type('div[contenteditable="true"]', message);
-        await page.keyboard.press('Enter');
-        
-        await page.waitForSelector('span[data-icon="msg-check"]');
-        
-        callback({ success: true });
-      } catch (error) {
-        console.error('Send message error:', error);
-        callback({ error: 'Failed to send message' });
+    const contactMap: Record<string, string> = {};
+    for (const c of contacts as Array<{ wa_id: string; profile?: { name?: string } }>) {
+      contactMap[c.wa_id] = c.profile?.name || '';
+    }
+
+    for (const rawMsg of messages as Array<Record<string, unknown>>) {
+      const from = String(rawMsg['from'] || '');
+      const providerId = String(rawMsg['id'] || '');
+      const type = String(rawMsg['type'] || 'text');
+
+      let msgBody = '';
+      let mediaId: string | undefined;
+      let mimeType: string | undefined;
+
+      if (type === 'text') {
+        msgBody = String((rawMsg['text'] as Record<string, string>)?.body || '');
+      } else if (type === 'image' || type === 'document' || type === 'video') {
+        const media = rawMsg[type] as Record<string, string> | undefined;
+        mediaId = media?.id;
+        mimeType = media?.mime_type;
+        msgBody = (rawMsg['caption'] as string) || '';
+      } else if (type === 'interactive') {
+        const interactive = rawMsg['interactive'] as Record<string, Record<string, string>> | undefined;
+        msgBody = interactive?.button_reply?.id || interactive?.list_reply?.id || '';
+      } else {
+        console.log('[Webhook] Ignoring unsupported message type:', type);
+        continue;
       }
-    });
 
-    socket.on('disconnect', async () => {
-      console.log('Client disconnected:', socket.id);
-      if (browser) {
-        await browser.close();
-        console.log('Browser closed for client:', socket.id);
-      }
-    });
+      console.log('[Inbound] from=' + from + ' type=' + type + ' mediaId=' + (mediaId || 'none'));
 
-  } catch (error) {
-    console.error('Server error:', error);
-    emitStatus(`Server error: ${error.message}`);
-    socket.emit('error', { message: 'Server initialization failed' });
+      enqueueMessage({
+        from,
+        senderName: contactMap[from],
+        body: msgBody,
+        providerId,
+        mediaId,
+        mimeType,
+      }).catch(err => console.error('[Enqueue error]', err));
+    }
+  } catch (err) {
+    console.error('[Webhook parse error]', err);
   }
 });
 
-const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
-  console.log(`WhatsApp server running on port ${PORT}`);
+// ─── CRM REST API ─────────────────────────────────────────────────────────────
+app.use('/api/v1', apiRouter);
+
+// ─── 404 fallback ─────────────────────────────────────────────────────────────
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ ok: false, error: 'Not found' });
+});
+
+// ─── Global error handler ─────────────────────────────────────────────────────
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[Unhandled error]', err);
+  res.status(500).json({ ok: false, error: 'Internal server error' });
+});
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log('[Server] S&N Homes WhatsApp CRM running on port ' + PORT);
+  console.log('[Server] Webhook URL: POST /api/webhooks/whatsapp');
+  console.log('[Server] Health: GET  /api/health');
+  if (!process.env.WHATSAPP_ACCESS_TOKEN) {
+    console.warn('[Server] WHATSAPP_ACCESS_TOKEN not set — outbound messages disabled');
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn('[Server] GEMINI_API_KEY not set — AI responses disabled');
+  }
+  startWorker();
 });

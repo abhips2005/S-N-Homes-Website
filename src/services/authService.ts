@@ -1,81 +1,68 @@
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword,
-  signOut,
-  GoogleAuthProvider, 
-  signInWithPopup,
-  onAuthStateChanged,
-  User as FirebaseUser
-} from 'firebase/auth';
-import { auth } from '../firebase-config';
+import { User as SupabaseAuthUser } from '@supabase/supabase-js';
+import { supabase } from '../supabase-config';
 
 export class AuthService {
-  onAuthStateChanged(callback: (user: FirebaseUser | null) => void) {
-    return onAuthStateChanged(auth, callback);
+  /**
+   * Subscribe to auth state changes.
+   * Returns an unsubscribe function (same contract as Firebase).
+   */
+  onAuthStateChanged(callback: (user: SupabaseAuthUser | null) => void): () => void {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
   }
 
-  async register(email: string, password: string): Promise<FirebaseUser> {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      return userCredential.user;
-    } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
+  async register(email: string, password: string): Promise<SupabaseAuthUser> {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      if (error.message.toLowerCase().includes('already registered')) {
         throw new Error('This email is already registered. Please login instead.');
       }
-      if (error.code === 'auth/weak-password') {
+      if (error.message.toLowerCase().includes('password')) {
         throw new Error('Password should be at least 6 characters long.');
       }
-      throw error;
+      throw new Error(error.message);
     }
+    if (!data.user) throw new Error('Registration failed — no user returned.');
+    return data.user;
   }
 
-  async login(email: string, password: string): Promise<FirebaseUser> {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return userCredential.user;
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+  async login(email: string, password: string): Promise<SupabaseAuthUser> {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      if (error.message.toLowerCase().includes('invalid login')) {
         throw new Error('Invalid email or password. Please try again.');
       }
-      if (error.code === 'auth/too-many-requests') {
+      if (error.message.toLowerCase().includes('rate')) {
         throw new Error('Too many failed login attempts. Please try again later.');
       }
-      throw error;
+      throw new Error(error.message);
     }
+    if (!data.user) throw new Error('Login failed — no user returned.');
+    return data.user;
   }
 
   async logout(): Promise<void> {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
-    }
+    const { error } = await supabase.auth.signOut();
+    if (error) throw new Error(error.message);
   }
 
-  async signInWithGoogle(): Promise<FirebaseUser> {
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
-      
-      const result = await signInWithPopup(auth, provider);
-      
-      if (!result.user) {
-        throw new Error('Google authentication failed');
-      }
-      
-      return result.user;
-    } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error('Google sign-in cancelled. Please try again.');
-      }
-      throw error;
-    }
+  async signInWithGoogle(): Promise<void> {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    });
+    if (error) throw new Error(error.message);
+    // Note: Google OAuth is redirect-based — the page will navigate away.
+    // Supabase will restore the session on return via detectSessionInUrl.
   }
 
-  getCurrentUser(): FirebaseUser | null {
-    return auth.currentUser;
+  async getCurrentUser(): Promise<SupabaseAuthUser | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
   }
 }

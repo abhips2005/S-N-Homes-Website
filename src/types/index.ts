@@ -47,6 +47,7 @@ export interface User {
   created_at: string;
   avatar_url?: string;
   verified: boolean;
+  phoneVerified?: boolean;
   preferences?: {
     propertyTypes: string[];
     locations: string[];
@@ -60,6 +61,7 @@ export interface User {
   savedProperties: string[];
   viewingHistory: string[];
 }
+
 
 export interface PropertySearch {
   location?: string;

@@ -3,13 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Mail, Lock, EyeOff, Eye, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { 
-  createUserWithEmailAndPassword,
-  updateProfile,
-  GoogleAuthProvider,
-  signInWithPopup
-} from 'firebase/auth';
-import { auth } from '../firebase-config';
+import { AuthService } from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
 import { UserService } from '../services/userService';
 
@@ -28,67 +22,55 @@ const Signup: React.FC = () => {
   
   // Google signup modal states
   const [showPhoneModal, setShowPhoneModal] = useState(false);
-  const [googleUserData, setGoogleUserData] = useState<any>(null);
   const [googlePhone, setGooglePhone] = useState('');
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (password !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    
+
     if (!phone || phone.trim().length < 10) {
       toast.error('Valid mobile number is required');
       return;
     }
-    
-    setIsLoading(true);
 
+    setIsLoading(true);
     try {
-      // Create user with Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Update profile with display name
-      await updateProfile(user, { displayName: fullName });
-      
-      // Create user profile in Firestore
-      await UserService.createUserProfile(user.uid, {
+      const authSvc = new AuthService();
+      // Register with Supabase Auth
+      const supabaseUser = await authSvc.register(email, password);
+
+      // Create profile row in the users table
+      await UserService.createUserProfile(supabaseUser.id, {
         name: fullName,
-        email: user.email || '',
-        phone: phone,
+        email: supabaseUser.email || '',
+        phone,
         phoneVerified: false,
-        role: 'user'
+        role: 'user',
       });
-      
-      // Create user data for context
+
       const userData = {
-        id: user.uid,
+        id: supabaseUser.id,
         name: fullName,
-        email: user.email || '',
-        phone: phone,
+        email: supabaseUser.email || '',
+        phone,
         phoneVerified: false,
         role: 'user' as const,
-        created_at: user.metadata.creationTime || new Date().toISOString(),
-        verified: user.emailVerified,
+        created_at: new Date().toISOString(),
+        verified: false,
         savedProperties: [],
-        viewingHistory: []
+        viewingHistory: [],
       };
-      
+
       login(userData);
       toast.success('Account created successfully!');
       navigate('/dashboard');
     } catch (error: any) {
       console.error('Signup error:', error);
-      if (error.code === 'auth/email-already-in-use') {
-        toast.error('Email already in use. Try logging in instead.');
-      } else if (error.code === 'auth/weak-password') {
-        toast.error('Password should be at least 6 characters');
-      } else {
-        toast.error(error.message || 'Failed to create account');
-      }
+      toast.error(error.message || 'Failed to create account');
     } finally {
       setIsLoading(false);
     }
@@ -97,73 +79,23 @@ const Signup: React.FC = () => {
   const handleGoogleSignup = async () => {
     try {
       setIsGoogleLoading(true);
-      
-      // Google signup with Firebase
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      
-      // Store Google user data and show phone modal
-      setGoogleUserData(user);
-      setShowPhoneModal(true);
-      setIsGoogleLoading(false);
+      // Supabase OAuth is redirect-based — navigates away and returns
+      // AuthContext will auto-create profile on return via user_metadata
+      const authSvc = new AuthService();
+      await authSvc.signInWithGoogle();
     } catch (error: any) {
       console.error('Google signup error:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        toast.error('Sign-up cancelled. Please try again.');
-      } else {
-        toast.error(error.message || 'Failed to signup with Google');
-      }
+      toast.error(error.message || 'Failed to signup with Google');
       setIsGoogleLoading(false);
     }
   };
 
   const handleCompleteGoogleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!googlePhone || googlePhone.trim().length < 10) {
-      toast.error('Valid mobile number is required');
-      return;
-    }
-    
-    if (!googleUserData) return;
-
-    try {
-      setIsLoading(true);
-      
-      // Create user profile in Firestore  
-      await UserService.createUserProfile(googleUserData.uid, {
-        name: googleUserData.displayName || 'User',
-        email: googleUserData.email || '',
-        phone: googlePhone,
-        phoneVerified: false,
-        role: 'user'
-      });
-      
-      // Create user data for context
-      const userData = {
-        id: googleUserData.uid,
-        name: googleUserData.displayName || 'User',
-        email: googleUserData.email || '',
-        phone: googlePhone,
-        phoneVerified: false,
-        role: 'user' as const,
-        created_at: googleUserData.metadata.creationTime || new Date().toISOString(),
-        verified: true,
-        savedProperties: [],
-        viewingHistory: []
-      };
-      
-      login(userData);
-      setShowPhoneModal(false);
-      toast.success('Account created with Google!');
-      navigate('/dashboard');
-    } catch (error: any) {
-      console.error('Error completing Google signup:', error);
-      toast.error('Failed to complete signup. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    // Phone collection for Google OAuth users is handled post-redirect
+    // via AuthContext auto-profile-create. This modal is kept for UX compat.
+    setShowPhoneModal(false);
+    navigate('/dashboard');
   };
 
   return (

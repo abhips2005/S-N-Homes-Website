@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
@@ -26,6 +26,14 @@ import AdminReports from './pages/AdminReports';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
 import AdminNotifications from './pages/AdminNotifications';
+import CrmOverview from './pages/CrmOverview';
+import CrmInbox from './pages/CrmInbox';
+import CrmBuyerRequests from './pages/CrmBuyerRequests';
+import CrmSellerSubmissions from './pages/CrmSellerSubmissions';
+import CrmFollowUps from './pages/CrmFollowUps';
+import CrmAuditLogs from './pages/CrmAuditLogs';
+import CrmProperties from './pages/CrmProperties';
+import CrmSettings from './pages/CrmSettings';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
@@ -65,6 +73,15 @@ function App() {
                   <Route path="/admin/users" element={<AdminUsers />} />
                   <Route path="/admin/notifications" element={<AdminNotifications />} />
                   <Route path="/admin/settings" element={<AdminSettings />} />
+                  {/* CRM routes */}
+                  <Route path="/admin/crm" element={<CrmOverview />} />
+                  <Route path="/admin/crm/inbox" element={<CrmInbox />} />
+                  <Route path="/admin/crm/buyers" element={<CrmBuyerRequests />} />
+                  <Route path="/admin/crm/sellers" element={<CrmSellerSubmissions />} />
+                  <Route path="/admin/crm/followups" element={<CrmFollowUps />} />
+                  <Route path="/admin/crm/audit" element={<CrmAuditLogs />} />
+                  <Route path="/admin/crm/properties" element={<CrmProperties />} />
+                  <Route path="/admin/crm/settings" element={<CrmSettings />} />
                 </Route>
               </Routes>
             </main>

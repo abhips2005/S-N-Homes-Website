@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ───────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validTimestamp(ts) {
+      return ts is timestamp;
+    }
+
+    // ─── Existing website collections ──────────────────────────────────────
+
+    // Public property listings — read by anyone, write by admin only
+    match /properties/{propertyId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Users — read/write own profile; admin reads all
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Saved properties / history — own only
+    match /savedProperties/{docId} {
+      allow read, write: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    match /propertyHistory/{docId} {
+      allow read, write: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // Notifications — own or admin
+    match /notifications/{docId} {
+      allow read: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // ─── CRM collections (admin-only from client; server uses Admin SDK) ───
+    // The Node.js server bypasses these rules via Admin SDK.
+    // Client-side admin pages read through these rules.
+
+    match /crm_customers/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // server-only writes
+    }
+
+    match /crm_conversations/{docId} {
+      allow read: if isAdmin();
+      // Admin can pause/resume (partial update only)
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasOnly(
+          ['automation_paused', 'last_message_at', 'updated_at']
+        );
+      allow create, delete: if false; // server-only
+    }
+
+    match /crm_messages/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // server-only writes
+    }
+
+    match /crm_buyer_requests/{docId} {
+      allow read: if isAdmin();
+      // Admin can update status + notes
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasAll(['status']) &&
+        request.resource.data.status in [
+          'new','contacted','requirements_collected','matching',
+          'visit_scheduled','negotiation','won','lost','on_hold'
+        ];
+      allow create, delete: if false;
+    }
+
+    match /crm_seller_submissions/{docId} {
+      allow read: if isAdmin();
+      // Admin can approve / reject / request-info (only specific status fields)
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasOnly([
+          'approval_status','reviewer_id','review_notes',
+          'reviewed_at','updated_at','property_id'
+        ]);
+      allow create, delete: if false;
+    }
+
+    match /crm_property_matches/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /crm_follow_up_tasks/{docId} {
+      allow read: if isAdmin();
+      // Admin can create and update tasks
+      allow create: if isAdmin() &&
+        request.resource.data.keys().hasAll(['task_type', 'due_at', 'status']);
+      allow update: if isAdmin() &&
+        request.resource.data.status in ['pending','in_progress','done','cancelled'];
+      allow delete: if isAdmin();
+    }
+
+    match /crm_webhook_events/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /crm_job_queue/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /crm_audit_logs/{docId} {
+      // Audit logs are immutable — no client writes ever
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /crm_notifications/{docId} {
+      allow read: if isAdmin();
+      // Admin can mark notifications as read
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
+    // ─── Deny all other documents ───────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,30 +1,9 @@
-import {
-  collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  QueryDocumentSnapshot,
-  DocumentData,
-  serverTimestamp,
-  increment
-} from 'firebase/firestore';
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject
-} from 'firebase/storage';
-import { db, storage } from '../firebase-config';
+import { supabase } from '../supabase-config';
 import type { Property } from '../types';
 import { cacheService } from './cacheService';
+
+const PROPERTIES_TABLE   = 'properties';
+const PROPERTY_IMAGES_BUCKET = 'property-images';
 
 export interface PropertyFilters {
   location?: string;
@@ -43,53 +22,111 @@ export interface PropertyFilters {
 
 export interface PaginationOptions {
   limitCount?: number;
-  lastDoc?: QueryDocumentSnapshot<DocumentData>;
+  lastDoc?: null; // Supabase uses offset/range; lastDoc kept for interface compat
 }
 
-// Collections
-const PROPERTIES_COLLECTION = 'properties';
-const PROPERTY_IMAGES_PATH = 'property-images';
+// ─── DB row ↔ TypeScript Property mapper ─────────────────────────────────────
 
-// Property CRUD Operations
+function rowToProperty(row: Record<string, unknown>): Property {
+  return {
+    id:                   row.id as string,
+    title:                (row.title as string) || '',
+    description:          (row.description as string) || '',
+    price:                Number(row.price) || 0,
+    type:                 (row.property_type as Property['type']) || 'land',
+    propertyListingType:  row.property_listing_type as Property['propertyListingType'],
+    location:             (row.location as string) || '',
+    district:             (row.district as string) || '',
+    bedrooms:             row.bedrooms !== null ? Number(row.bedrooms) : undefined,
+    bathrooms:            row.bathrooms !== null ? Number(row.bathrooms) : undefined,
+    area:                 Number(row.area) || 0,
+    landArea:             Number(row.land_area) || 0,
+    landAreaUnit:         (row.land_area_unit as Property['landAreaUnit']) || 'cent',
+    images:               (row.images as string[]) || [],
+    features:             (row.features as string[]) || [],
+    user_id:              (row.user_id as string) || '',
+    created_at:           row.created_at as string,
+    is_premium:           Boolean(row.is_premium),
+    status:               (row.status as Property['status']) || 'available',
+    virtual_tour_url:     row.virtual_tour_url as string | undefined,
+    amenities:            (row.amenities as string[]) || [],
+    nearbyPlaces:         (row.nearby_places as Property['nearbyPlaces']) || [],
+    constructionYear:     row.construction_year !== null ? Number(row.construction_year) : undefined,
+    lastRenovated:        row.last_renovated as string | undefined,
+    parkingSpaces:        row.parking_spaces !== null ? Number(row.parking_spaces) : undefined,
+    furnished:            (row.furnished as Property['furnished']) || 'Not Applicable',
+    views:                Number(row.views) || 0,
+    coordinates:          (row.coordinates as Property['coordinates']) || { latitude: 0, longitude: 0 },
+  };
+}
+
+function propertyToRow(p: Omit<Property, 'id' | 'created_at' | 'views'>): Record<string, unknown> {
+  return {
+    title:                p.title,
+    description:          p.description,
+    price:                p.price,
+    property_type:        p.type,
+    property_listing_type: p.propertyListingType ?? null,
+    location:             p.location,
+    district:             p.district,
+    bedrooms:             p.bedrooms ?? null,
+    bathrooms:            p.bathrooms ?? null,
+    area:                 p.area,
+    land_area:            p.landArea,
+    land_area_unit:       p.landAreaUnit || 'cent',
+    images:               p.images || [],
+    features:             p.features || [],
+    amenities:            p.amenities || [],
+    nearby_places:        p.nearbyPlaces || [],
+    furnished:            p.furnished || 'Not Applicable',
+    virtual_tour_url:     p.virtual_tour_url ?? null,
+    construction_year:    p.constructionYear ?? null,
+    last_renovated:       p.lastRenovated ?? null,
+    parking_spaces:       p.parkingSpaces ?? null,
+    is_premium:           p.is_premium || false,
+    status:               p.status || 'available',
+    user_id:              p.user_id,
+    coordinates:          p.coordinates ?? null,
+  };
+}
+
+// ─── Property CRUD ────────────────────────────────────────────────────────────
+
 export class PropertyService {
-  
+
   // Create a new property
-  static async createProperty(propertyData: Omit<Property, 'id' | 'created_at' | 'views'>, imageFiles: File[]): Promise<string> {
+  static async createProperty(
+    propertyData: Omit<Property, 'id' | 'created_at' | 'views'>,
+    imageFiles: File[]
+  ): Promise<string> {
     try {
       console.log('Creating property with data:', propertyData);
-      console.log('Number of image files:', imageFiles.length);
-      
-      // Upload images first
+
       const imageUrls = await this.uploadPropertyImages(imageFiles);
-      console.log('Images uploaded successfully:', imageUrls);
-      
-      // Generate property ID
-      const propertyId = `KE-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-      
-      const newProperty: Omit<Property, 'id'> = {
-        ...propertyData,
+      console.log('Images uploaded:', imageUrls.length);
+
+      const row = {
+        ...propertyToRow(propertyData),
         images: imageUrls,
-        created_at: serverTimestamp() as any,
         views: 0,
-        status: 'available'
+        status: 'available',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
-      console.log('Attempting to create property document:', newProperty);
-      const docRef =       await addDoc(collection(db, PROPERTIES_COLLECTION), newProperty);
-      console.log('Property created with ID:', docRef.id);
-      
-      // Invalidate relevant caches
+      const { data, error } = await supabase
+        .from(PROPERTIES_TABLE)
+        .insert(row)
+        .select('id')
+        .single();
+
+      if (error) throw new Error(error.message);
+      console.log('Property created with ID:', data.id);
       cacheService.invalidateOnChange('property_create');
-      
-      return docRef.id;
+      return data.id as string;
     } catch (error) {
       console.error('Error creating property:', error);
-      console.error('Error details:', {
-        code: (error as any)?.code,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
-      throw new Error(`Failed to create property: ${(error as any)?.message || 'Unknown error'}`);
+      throw new Error(`Failed to create property: ${(error as Error).message || 'Unknown error'}`);
     }
   }
 
@@ -99,20 +136,19 @@ export class PropertyService {
       return await cacheService.getOrFetch(
         `property_${id}`,
         async () => {
-          const docRef = doc(db, PROPERTIES_COLLECTION, id);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            return {
-              id: docSnap.id,
-              ...data,
-              created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-            } as Property;
+          const { data, error } = await supabase
+            .from(PROPERTIES_TABLE)
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          if (error) {
+            if (error.code === 'PGRST116') return null; // not found
+            throw new Error(error.message);
           }
-          return null;
+          return data ? rowToProperty(data as Record<string, unknown>) : null;
         },
-        2 * 60 * 1000 // 2 minutes cache for individual properties
+        2 * 60 * 1000
       );
     } catch (error) {
       console.error('Error getting property:', error);
@@ -123,27 +159,42 @@ export class PropertyService {
   // Update property
   static async updateProperty(id: string, updates: Partial<Property>, newImageFiles?: File[]): Promise<void> {
     try {
-      const docRef = doc(db, PROPERTIES_COLLECTION, id);
-      
-      let updateData = { ...updates };
-      
-      // Handle new images if provided
-      if (newImageFiles && newImageFiles.length > 0) {
-        const newImageUrls = await this.uploadPropertyImages(newImageFiles);
-        updateData.images = [...(updates.images || []), ...newImageUrls];
-      }
-      
-      // Remove undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key as keyof Property] === undefined) {
-          delete updateData[key as keyof Property];
-        }
-      });
+      // Map camelCase TS fields → snake_case DB columns for the fields that changed
+      const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.title !== undefined)              dbUpdates.title = updates.title;
+      if (updates.description !== undefined)        dbUpdates.description = updates.description;
+      if (updates.price !== undefined)              dbUpdates.price = updates.price;
+      if (updates.type !== undefined)               dbUpdates.property_type = updates.type;
+      if (updates.propertyListingType !== undefined) dbUpdates.property_listing_type = updates.propertyListingType;
+      if (updates.location !== undefined)           dbUpdates.location = updates.location;
+      if (updates.district !== undefined)           dbUpdates.district = updates.district;
+      if (updates.bedrooms !== undefined)           dbUpdates.bedrooms = updates.bedrooms;
+      if (updates.bathrooms !== undefined)          dbUpdates.bathrooms = updates.bathrooms;
+      if (updates.area !== undefined)               dbUpdates.area = updates.area;
+      if (updates.landArea !== undefined)           dbUpdates.land_area = updates.landArea;
+      if (updates.landAreaUnit !== undefined)       dbUpdates.land_area_unit = updates.landAreaUnit;
+      if (updates.features !== undefined)           dbUpdates.features = updates.features;
+      if (updates.amenities !== undefined)          dbUpdates.amenities = updates.amenities;
+      if (updates.furnished !== undefined)          dbUpdates.furnished = updates.furnished;
+      if (updates.status !== undefined)             dbUpdates.status = updates.status;
+      if (updates.is_premium !== undefined)         dbUpdates.is_premium = updates.is_premium;
+      if (updates.nearbyPlaces !== undefined)       dbUpdates.nearby_places = updates.nearbyPlaces;
+      if (updates.constructionYear !== undefined)   dbUpdates.construction_year = updates.constructionYear;
+      if (updates.lastRenovated !== undefined)      dbUpdates.last_renovated = updates.lastRenovated;
+      if (updates.parkingSpaces !== undefined)      dbUpdates.parking_spaces = updates.parkingSpaces;
+      if (updates.virtual_tour_url !== undefined)   dbUpdates.virtual_tour_url = updates.virtual_tour_url;
+      if (updates.coordinates !== undefined)        dbUpdates.coordinates = updates.coordinates;
 
-      await updateDoc(docRef, updateData);
+      if (newImageFiles && newImageFiles.length > 0) {
+        const newUrls = await this.uploadPropertyImages(newImageFiles);
+        dbUpdates.images = [...(updates.images || []), ...newUrls];
+      } else if (updates.images !== undefined) {
+        dbUpdates.images = updates.images;
+      }
+
+      const { error } = await supabase.from(PROPERTIES_TABLE).update(dbUpdates).eq('id', id);
+      if (error) throw new Error(error.message);
       console.log('Property updated successfully');
-      
-      // Invalidate relevant caches
       cacheService.invalidateOnChange('property_update', id);
     } catch (error) {
       console.error('Error updating property:', error);
@@ -154,20 +205,14 @@ export class PropertyService {
   // Delete property
   static async deleteProperty(id: string): Promise<void> {
     try {
-      // First get the property to access image URLs
       const property = await this.getPropertyById(id);
-      
-      if (property?.images) {
-        // Delete all associated images
+      if (property?.images?.length) {
         await this.deletePropertyImages(property.images);
       }
-      
-      // Delete the document
-      const docRef = doc(db, PROPERTIES_COLLECTION, id);
-      await deleteDoc(docRef);
+
+      const { error } = await supabase.from(PROPERTIES_TABLE).delete().eq('id', id);
+      if (error) throw new Error(error.message);
       console.log('Property deleted successfully');
-      
-      // Invalidate relevant caches
       cacheService.invalidateOnChange('property_delete', id);
     } catch (error) {
       console.error('Error deleting property:', error);
@@ -179,135 +224,52 @@ export class PropertyService {
   static async getProperties(
     filters: PropertyFilters = {},
     pagination: PaginationOptions = {},
-    sortBy: string = 'created_at'
-  ): Promise<{ properties: Property[], lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+    sortBy = 'created_at'
+  ): Promise<{ properties: Property[]; lastDoc: null }> {
     try {
-      console.log('Getting properties with filters:', filters);
-      console.log('Pagination options:', pagination);
-      console.log('Sort by:', sortBy);
-      
-      // Use ultra-simple query to get all properties and filter client-side
-      // This avoids any Firestore index issues
-      const q = query(
-        collection(db, PROPERTIES_COLLECTION),
-        limit(100) // Get more to account for filtering
-      );
+      let q = supabase.from(PROPERTIES_TABLE).select('*');
 
-      console.log('Executing ultra-simple query for filtering...');
-      const querySnapshot = await getDocs(q);
-      console.log('Query executed successfully. Documents found:', querySnapshot.size);
-      
-      const allProperties: Property[] = [];
+      // Apply server-side filters
+      q = q.eq('status', filters.status || 'available');
+      if (filters.type)                q = q.eq('property_type', filters.type);
+      if (filters.district)            q = q.eq('district', filters.district);
+      if (filters.propertyListingType) q = q.eq('property_listing_type', filters.propertyListingType);
+      if (filters.minPrice)            q = q.gte('price', filters.minPrice);
+      if (filters.maxPrice)            q = q.lte('price', filters.maxPrice);
+      if (filters.bedrooms)            q = q.gte('bedrooms', filters.bedrooms);
+      if (filters.minArea)             q = q.gte('area', filters.minArea);
+      if (filters.maxArea)             q = q.lte('area', filters.maxArea);
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        allProperties.push({
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-        } as Property);
-      });
-
-      // Apply all filters client-side
-      let filteredProperties = allProperties;
-      
-      // Filter by status (default to available)
-      if (filters.status) {
-        filteredProperties = filteredProperties.filter(p => p.status === filters.status);
-      } else {
-        filteredProperties = filteredProperties.filter(p => p.status === 'available');
-      }
-      
-      // Filter by type
-      if (filters.type) {
-        filteredProperties = filteredProperties.filter(p => p.type === filters.type);
-      }
-      
-      // Filter by district
-      if (filters.district) {
-        filteredProperties = filteredProperties.filter(p => p.district === filters.district);
-      }
-      
-      // Filter by property listing type
-      if (filters.propertyListingType) {
-        filteredProperties = filteredProperties.filter(p => p.propertyListingType === filters.propertyListingType);
-      }
-      
-      // Filter by location (partial match)
+      // Location: partial text match via ilike
       if (filters.location) {
-        filteredProperties = filteredProperties.filter(p => 
-          p.location?.toLowerCase().includes(filters.location!.toLowerCase())
+        q = q.ilike('location', `%${filters.location}%`);
+      }
+
+      // Sorting
+      if (sortBy === 'price-asc')  q = q.order('price', { ascending: true });
+      else if (sortBy === 'price-desc') q = q.order('price', { ascending: false });
+      else q = q.order('created_at', { ascending: false });
+
+      q = q.limit(pagination.limitCount || 100);
+
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+
+      let properties = (data ?? []).map(r => rowToProperty(r as Record<string, unknown>));
+
+      // Furnished filter (client-side, as it's a text field with multiple values)
+      if (filters.furnished !== undefined) {
+        properties = properties.filter(p =>
+          filters.furnished
+            ? p.furnished === 'Yes' || p.furnished === 'Semi Furnished'
+            : p.furnished === 'No' || p.furnished === 'Not Applicable'
         );
       }
-      
-      // Filter by bedrooms
-      if (filters.bedrooms) {
-        filteredProperties = filteredProperties.filter(p => p.bedrooms && p.bedrooms >= filters.bedrooms!);
-      }
-      
-      // Filter by price range
-      if (filters.minPrice) {
-        filteredProperties = filteredProperties.filter(p => p.price >= filters.minPrice!);
-      }
-      
-      if (filters.maxPrice) {
-        filteredProperties = filteredProperties.filter(p => p.price <= filters.maxPrice!);
-      }
-      
-      // Filter by area
-      if (filters.minArea) {
-        filteredProperties = filteredProperties.filter(p => p.area >= filters.minArea!);
-      }
-      
-      if (filters.maxArea) {
-        filteredProperties = filteredProperties.filter(p => p.area <= filters.maxArea!);
-      }
-      
-      // Filter by furnished
-      if (filters.furnished !== undefined) {
-        filteredProperties = filteredProperties.filter(p => {
-          if (filters.furnished === true) {
-            return p.furnished === 'Yes' || p.furnished === 'Semi Furnished';
-          } else {
-            return p.furnished === 'No' || p.furnished === 'Not Applicable';
-          }
-        });
-      }
 
-      // Apply sorting client-side
-      filteredProperties.sort((a, b) => {
-        if (sortBy === 'price-asc') {
-          return a.price - b.price;
-        } else if (sortBy === 'price-desc') {
-          return b.price - a.price;
-        } else {
-          // Sort by created_at (default)
-          const dateA = new Date(a.created_at).getTime();
-          const dateB = new Date(b.created_at).getTime();
-          return dateB - dateA; // Descending order (newest first)
-        }
-      });
-
-      // Apply pagination client-side
-      const startIndex = pagination.lastDoc ? 0 : 0; // For simplicity, reset pagination for now
-      const limitCount = pagination.limitCount || 12;
-      const paginatedProperties = filteredProperties.slice(startIndex, startIndex + limitCount);
-
-      console.log('Final filtered and sorted properties count:', paginatedProperties.length);
-      console.log('Total filtered properties before pagination:', filteredProperties.length);
-      
-      return { 
-        properties: paginatedProperties, 
-        lastDoc: null // Simplified pagination for now
-      };
+      return { properties: properties.slice(0, pagination.limitCount || 12), lastDoc: null };
     } catch (error) {
       console.error('Error getting properties:', error);
-      console.error('Error details:', {
-        code: (error as any)?.code,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
-      throw new Error(`Failed to get properties: ${(error as any)?.message || 'Unknown error'}`);
+      throw new Error(`Failed to get properties: ${(error as Error).message || 'Unknown error'}`);
     }
   }
 
@@ -317,69 +279,38 @@ export class PropertyService {
       return await cacheService.getOrFetch(
         `user_properties_${userId}`,
         async () => {
-          console.log('Getting properties for user:', userId);
-          
-          // Use simple query to get all properties, then filter client-side
-          // This avoids needing composite indexes
-          const q = query(
-            collection(db, PROPERTIES_COLLECTION),
-            limit(100) // Get more to account for filtering
-          );
-          
-          const querySnapshot = await getDocs(q);
-          console.log('Query executed successfully. Documents found:', querySnapshot.size);
-          
-          const allProperties: Property[] = [];
+          const { data, error } = await supabase
+            .from(PROPERTIES_TABLE)
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(100);
 
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            allProperties.push({
-              id: doc.id,
-              ...data,
-              created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-            } as Property);
-          });
-
-          // Filter by user ID client-side
-          const userProperties = allProperties.filter(property => property.user_id === userId);
-          
-          // Sort by creation date client-side
-          userProperties.sort((a, b) => {
-            const dateA = new Date(a.created_at).getTime();
-            const dateB = new Date(b.created_at).getTime();
-            return dateB - dateA; // Descending order (newest first)
-          });
-
-          console.log('User properties found:', userProperties.length);
-          return userProperties;
+          if (error) throw new Error(error.message);
+          return (data ?? []).map(r => rowToProperty(r as Record<string, unknown>));
         },
-        3 * 60 * 1000 // 3 minutes cache for user properties
+        3 * 60 * 1000
       );
     } catch (error) {
       console.error('Error getting user properties:', error);
-      console.error('Error details:', {
-        code: (error as any)?.code,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
-      throw new Error(`Failed to get user properties: ${(error as any)?.message || 'Unknown error'}`);
+      throw new Error(`Failed to get user properties: ${(error as Error).message || 'Unknown error'}`);
     }
   }
 
   // Search properties by text
   static async searchProperties(searchTerm: string): Promise<Property[]> {
     try {
-      // For text search, we'll get all properties and filter client-side
-      // In production, consider using Algolia or Elasticsearch for better search
-      const { properties } = await this.getProperties();
-      
-      const searchTermLower = searchTerm.toLowerCase();
-      return properties.filter(property =>
-        property.title?.toLowerCase().includes(searchTermLower) ||
-        property.description?.toLowerCase().includes(searchTermLower) ||
-        property.location?.toLowerCase().includes(searchTermLower) ||
-        property.district?.toLowerCase().includes(searchTermLower)
-      );
+      const term = `%${searchTerm}%`;
+      const { data, error } = await supabase
+        .from(PROPERTIES_TABLE)
+        .select('*')
+        .eq('status', 'available')
+        .or(`title.ilike.${term},description.ilike.${term},location.ilike.${term},district.ilike.${term}`)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(r => rowToProperty(r as Record<string, unknown>));
     } catch (error) {
       console.error('Error searching properties:', error);
       throw new Error('Failed to search properties');
@@ -389,108 +320,55 @@ export class PropertyService {
   // Increment property views
   static async incrementViews(propertyId: string): Promise<void> {
     try {
-      const docRef = doc(db, PROPERTIES_COLLECTION, propertyId);
-      await updateDoc(docRef, {
-        views: increment(1)
-      });
+      await supabase.rpc('increment_property_views', { property_id: propertyId });
     } catch (error) {
       console.error('Error incrementing views:', error);
-      // Don't throw error for view increment failures
+      // Non-critical — don't throw
     }
   }
 
-  // Upload property images to Firebase Storage
-  private static async uploadPropertyImages(files: File[]): Promise<string[]> {
-    console.log(`Uploading ${files.length} images to Firebase Storage...`);
-    
-    const uploadPromises = files.map(async (file, index) => {
-      try {
-        console.log(`Uploading image ${index + 1}/${files.length}: ${file.name}`);
-        const timestamp = Date.now();
-        const fileName = `${timestamp}-${file.name}`;
-        const storageRef = ref(storage, `${PROPERTY_IMAGES_PATH}/${fileName}`);
-        
-        const snapshot = await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(snapshot.ref);
-        console.log(`Image ${index + 1} uploaded successfully:`, downloadURL);
-        return downloadURL;
-      } catch (error) {
-        console.error(`Error uploading image ${index + 1}:`, error);
-        throw error;
-      }
-    });
+  // Get all available properties
+  static async getAllAvailableProperties(limitCount = 20): Promise<Property[]> {
+    try {
+      return await cacheService.getOrFetch(
+        `all_properties_${limitCount}`,
+        async () => {
+          const { data, error } = await supabase
+            .from(PROPERTIES_TABLE)
+            .select('*')
+            .eq('status', 'available')
+            .order('created_at', { ascending: false })
+            .limit(limitCount);
 
-    return Promise.all(uploadPromises);
+          if (error) throw new Error(error.message);
+          return (data ?? []).map(r => rowToProperty(r as Record<string, unknown>));
+        },
+        2 * 60 * 1000
+      );
+    } catch (error) {
+      console.error('Error getting available properties:', error);
+      throw new Error(`Failed to get available properties: ${(error as Error).message || 'Unknown error'}`);
+    }
   }
 
-  // Delete property images from Firebase Storage
-  private static async deletePropertyImages(imageUrls: string[]): Promise<void> {
-    const deletePromises = imageUrls.map(async (url) => {
-      try {
-        const imageRef = ref(storage, url);
-        await deleteObject(imageRef);
-      } catch (error) {
-        console.warn('Error deleting image:', url, error);
-        // Continue with other deletions even if one fails
-      }
-    });
-
-    await Promise.allSettled(deletePromises);
-  }
-
-  // Get property statistics for dashboard
+  // Get property statistics
   static async getPropertyStats(userId?: string): Promise<{
-    total: number;
-    available: number;
-    sold: number;
-    rented: number;
-    totalViews: number;
+    total: number; available: number; sold: number; rented: number; totalViews: number;
   }> {
     try {
-      console.log('Getting property stats for user:', userId || 'all users');
-      
-      // Use simple query to get all properties, then filter client-side
-      const q = query(
-        collection(db, PROPERTIES_COLLECTION),
-        limit(500) // Get more for stats calculation
-      );
-      
-      const querySnapshot = await getDocs(q);
-      console.log('Stats query executed successfully. Documents found:', querySnapshot.size);
-      
-      const stats = {
-        total: 0,
-        available: 0,
-        sold: 0,
-        rented: 0,
-        totalViews: 0
-      };
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        // Filter by user if specified
-        if (userId && data.user_id !== userId) {
-          return; // Skip this property
-        }
-        
+      let q = supabase.from(PROPERTIES_TABLE).select('status, views');
+      if (userId) q = q.eq('user_id', userId);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+
+      const stats = { total: 0, available: 0, sold: 0, rented: 0, totalViews: 0 };
+      for (const row of data ?? []) {
         stats.total++;
-        stats.totalViews += data.views || 0;
-        
-        switch (data.status) {
-          case 'available':
-            stats.available++;
-            break;
-          case 'sold':
-            stats.sold++;
-            break;
-          case 'rented':
-            stats.rented++;
-            break;
-        }
-      });
-      
-      console.log('Property stats calculated:', stats);
+        stats.totalViews += Number(row.views) || 0;
+        if (row.status === 'available') stats.available++;
+        else if (row.status === 'sold') stats.sold++;
+        else if (row.status === 'rented') stats.rented++;
+      }
       return stats;
     } catch (error) {
       console.error('Error getting property stats:', error);
@@ -498,52 +376,46 @@ export class PropertyService {
     }
   }
 
-  // Get all available properties (simple query)
-  static async getAllAvailableProperties(limitCount: number = 20): Promise<Property[]> {
-    try {
-      return await cacheService.getOrFetch(
-        `all_properties_${limitCount}`,
-        async () => {
-          console.log('Getting all available properties...');
-          
-          // Ultra-simple query - just get all documents without complex filtering
-          const q = query(
-            collection(db, PROPERTIES_COLLECTION),
-            limit(limitCount)
-          );
+  // ── Upload property images to Supabase Storage ─────────────────────────────
+  private static async uploadPropertyImages(files: File[]): Promise<string[]> {
+    if (files.length === 0) return [];
+    console.log(`Uploading ${files.length} images to Supabase Storage...`);
 
-          const querySnapshot = await getDocs(q);
-          console.log('Ultra-simple query executed successfully. Documents found:', querySnapshot.size);
-          
-          const properties: Property[] = [];
+    const uploadPromises = files.map(async (file, index) => {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${timestamp}_${index}_${safeName}`;
 
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            // Filter available properties on client side
-            if (data.status === 'available') {
-              properties.push({
-                id: doc.id,
-                ...data,
-                created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
-              } as Property);
-            }
-          });
+      const { error } = await supabase.storage
+        .from(PROPERTY_IMAGES_BUCKET)
+        .upload(path, file, { contentType: file.type, upsert: false });
 
-          // Sort by creation date on client side
-          properties.sort((a, b) => {
-            const dateA = new Date(a.created_at).getTime();
-            const dateB = new Date(b.created_at).getTime();
-            return dateB - dateA; // Descending order (newest first)
-          });
+      if (error) throw new Error(`Image upload failed: ${error.message}`);
 
-          console.log('Available properties loaded:', properties.length);
-          return properties;
-        },
-        2 * 60 * 1000 // 2 minutes cache for available properties list
-      );
-    } catch (error) {
-      console.error('Error getting available properties:', error);
-      throw new Error(`Failed to get available properties: ${(error as any)?.message || 'Unknown error'}`);
-    }
+      const { data: publicData } = supabase.storage
+        .from(PROPERTY_IMAGES_BUCKET)
+        .getPublicUrl(path);
+
+      console.log(`Image ${index + 1} uploaded:`, publicData.publicUrl);
+      return publicData.publicUrl;
+    });
+
+    return Promise.all(uploadPromises);
+  }
+
+  // ── Delete property images from Supabase Storage ──────────────────────────
+  private static async deletePropertyImages(imageUrls: string[]): Promise<void> {
+    // Extract path from public URL (everything after /property-images/)
+    const paths = imageUrls
+      .map(url => {
+        const match = url.match(/property-images\/(.+)/);
+        return match ? match[1] : null;
+      })
+      .filter(Boolean) as string[];
+
+    if (paths.length === 0) return;
+
+    const { error } = await supabase.storage.from(PROPERTY_IMAGES_BUCKET).remove(paths);
+    if (error) console.warn('Error deleting images:', error.message);
   }
 }

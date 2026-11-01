@@ -14,8 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserService } from '../services/userService';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { auth } from '../firebase-config';
+import { supabase } from '../supabase-config';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -34,15 +33,24 @@ interface NotificationSettings {
 }
 
 const Settings: React.FC = () => {
-  const { user, logout, firebaseUser } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Check if user signed in with Google
-  const isGoogleUser = firebaseUser?.providerData?.some(provider => provider.providerId === 'google.com') || false;
+  // Supabase: check if the user signed in with Google OAuth
+  // (email field ends with @gmail.com is a rough heuristic;
+  //  the reliable way is to check the session's provider via supabase.auth.getSession)
+  const [isGoogleUser, setIsGoogleUser] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const provider = session?.user?.app_metadata?.provider;
+      setIsGoogleUser(provider === 'google');
+    });
+  }, []);
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -119,8 +127,8 @@ const Settings: React.FC = () => {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user || !auth.currentUser) {
+
+    if (!user) {
       toast.error('User not authenticated');
       return;
     }
@@ -138,25 +146,26 @@ const Settings: React.FC = () => {
     try {
       setLoading(true);
 
-      // Re-authenticate user with current password
-      const credential = EmailAuthProvider.credential(
-        user.email,
-        passwordData.currentPassword
-      );
-      
-      await reauthenticateWithCredential(auth.currentUser, credential);
-      
-      // Update password
-      await updatePassword(auth.currentUser, passwordData.newPassword);
-      
-      toast.success('Password changed successfully!');
-      
-      // Clear form
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+      // Re-authenticate by signing in with current password
+      const { error: reAuthErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: passwordData.currentPassword,
       });
+
+      if (reAuthErr) {
+        toast.error('Current password is incorrect');
+        return;
+      }
+
+      // Update password via Supabase Auth
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
+      });
+
+      if (updateErr) throw updateErr;
+
+      toast.success('Password changed successfully!');
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       
     } catch (error: any) {
       console.error('Error changing password:', error);
