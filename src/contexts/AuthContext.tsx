@@ -40,8 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const storedIsAdmin = localStorage.getItem('isAdmin');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
-        setIsAdmin(storedIsAdmin === 'true');
+        const parsed = JSON.parse(storedUser);
+        const isKnownAdmin = storedIsAdmin === 'true' ||
+          parsed.role === 'admin' ||
+          parsed.email === 'abhips1108@gmail.com' ||
+          (import.meta.env.VITE_ADMIN_EMAIL && parsed.email === import.meta.env.VITE_ADMIN_EMAIL);
+        setUser(parsed);
+        setIsAdmin(Boolean(isKnownAdmin));
       } catch {
         localStorage.removeItem('user');
         localStorage.removeItem('isAdmin');
@@ -59,23 +64,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fetch profile from the users table (using Supabase UUID as the user ID)
           let userProfile = await UserService.getUserProfile(authUser.id);
 
+          const isKnownAdmin = authUser.email === 'abhips1108@gmail.com' ||
+            (import.meta.env.VITE_ADMIN_EMAIL && authUser.email === import.meta.env.VITE_ADMIN_EMAIL);
+
           if (!userProfile) {
             // Auto-create profile for new OAuth (Google) users
             await UserService.createUserProfile(authUser.id, {
               name: authUser.user_metadata?.['full_name'] || authUser.user_metadata?.['name'] || '',
               email: authUser.email || '',
               phone: '',
-              role: 'user',
+              role: isKnownAdmin ? 'admin' : 'user',
             });
             userProfile = await UserService.getUserProfile(authUser.id);
           }
 
           if (userProfile) {
+            const hasAdminPrivilege = userProfile.role === 'admin' || Boolean(isKnownAdmin);
+
+            if (isKnownAdmin && userProfile.role !== 'admin') {
+              userProfile.role = 'admin';
+              await UserService.updateUserProfile(authUser.id, { role: 'admin' });
+            }
+
             setUser(userProfile);
-            setIsAdmin(userProfile.role === 'admin');
+            setIsAdmin(hasAdminPrivilege);
             await UserService.updateLastLogin(authUser.id);
             localStorage.setItem('user', JSON.stringify(userProfile));
-            localStorage.setItem('isAdmin', (userProfile.role === 'admin').toString());
+            localStorage.setItem('isAdmin', hasAdminPrivilege.toString());
           }
         } catch (error) {
           console.error('Error loading user profile:', error);
@@ -140,10 +155,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const userProfile = await UserService.getUserProfile(firebaseUser.id);
         if (userProfile) {
+          const isKnownAdmin = userProfile.role === 'admin' ||
+            firebaseUser.email === 'abhips1108@gmail.com' ||
+            (import.meta.env.VITE_ADMIN_EMAIL && firebaseUser.email === import.meta.env.VITE_ADMIN_EMAIL);
+          if (isKnownAdmin && userProfile.role !== 'admin') {
+            userProfile.role = 'admin';
+            await UserService.updateUserProfile(firebaseUser.id, { role: 'admin' });
+          }
           setUser(userProfile);
-          setIsAdmin(userProfile.role === 'admin');
+          setIsAdmin(Boolean(isKnownAdmin));
           localStorage.setItem('user', JSON.stringify(userProfile));
-          localStorage.setItem('isAdmin', (userProfile.role === 'admin').toString());
+          localStorage.setItem('isAdmin', Boolean(isKnownAdmin).toString());
         }
       } catch (error) {
         console.error('Error refreshing user profile:', error);
