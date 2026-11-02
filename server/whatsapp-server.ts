@@ -34,22 +34,15 @@ app.use(rateLimit({
   legacyHeaders: false,
 }));
 
-// ─── Raw body for HMAC (must be before express.json()) ───────────────────────
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.path === '/api/webhooks/whatsapp' && req.method === 'POST') {
-    let data = '';
-    req.setEncoding('utf8');
-    req.on('data', chunk => { data += chunk; });
-    req.on('end', () => {
-      (req as Request & { rawBody: string }).rawBody = data;
-      next();
-    });
-  } else {
-    next();
-  }
-});
-
-app.use(express.json({ limit: '1mb' }));
+// ─── JSON body parser with rawBody capture for Meta HMAC verification ─────────
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req: Request & { rawBody?: string }, _res: Response, buf: Buffer) => {
+      req.rawBody = buf.toString('utf8');
+    },
+  })
+);
 
 // ─── HMAC signature validator ─────────────────────────────────────────────────
 function verifyHmac(req: Request & { rawBody?: string }): boolean {
@@ -61,7 +54,10 @@ function verifyHmac(req: Request & { rawBody?: string }): boolean {
     .createHmac('sha256', secret)
     .update(req.rawBody)
     .digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expBuf);
 }
 
 // ─── Health check ─────────────────────────────────────────────────────────────
