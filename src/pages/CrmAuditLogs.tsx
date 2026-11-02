@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Shield, RefreshCw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { AuditLogService } from '../services/crmService';
 
 interface AuditLog {
   id: string;
@@ -39,12 +40,8 @@ export default function CrmAuditLogs() {
   const load = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '200' });
-      if (entityFilter) params.set('entity', entityFilter);
-      const res = await fetch('/api/v1/audit-logs?' + params.toString());
-      const data = await res.json();
-      if (data.ok) setLogs(data.data);
-      else throw new Error(data.error);
+      const data = await AuditLogService.getAll(200, entityFilter || undefined);
+      setLogs(data as AuditLog[]);
     } catch {
       toast.error('Failed to load audit logs');
     } finally {
@@ -64,7 +61,7 @@ export default function CrmAuditLogs() {
   const entities = [...new Set(logs.map(l => l.entity))];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

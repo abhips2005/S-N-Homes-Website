@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, ChevronLeft, CheckCircle, XCircle, AlertCircle, RefreshCw, Save } from 'lucide-react';
+import { BACKEND_URL } from '../services/crmService';
 
 interface HealthStatus {
   ok: boolean;
@@ -57,7 +58,8 @@ export default function CrmSettings() {
     setHealthLoading(true);
     setHealthError('');
     try {
-      const res = await fetch('/api/health');
+      const url = BACKEND_URL ? `${BACKEND_URL}/api/health` : '/api/health';
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Server returned ' + res.status);
       setHealth(await res.json());
     } catch (e) {
@@ -86,7 +88,7 @@ export default function CrmSettings() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
       <div className="max-w-3xl mx-auto space-y-6">
 
         {/* Header */}

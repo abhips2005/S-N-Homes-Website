@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { getDashboardSummary } from '../services/crmService';
+import { useState, useEffect } from 'react';
+import { getDashboardSummary, BACKEND_URL } from '../services/crmService';
 import type { DashboardSummary } from '../types/crm';
 import { Link } from 'react-router-dom';
 import {
@@ -41,7 +41,8 @@ export default function CrmOverview() {
 
   const checkServer = async () => {
     try {
-      const res = await fetch('/api/health');  // proxied via Vite to port 3001
+      const url = BACKEND_URL ? `${BACKEND_URL}/api/health` : '/api/health';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setWaStatus({ configured: data.whatsapp_configured, ai_configured: data.ai_configured });
@@ -52,7 +53,7 @@ export default function CrmOverview() {
   useEffect(() => { load(); checkServer(); }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

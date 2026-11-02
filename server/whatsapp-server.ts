@@ -12,6 +12,7 @@
  */
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -27,6 +28,7 @@ const PORT = Number(process.env.PORT) || 3001;
 
 // ─── Security middleware ──────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(rateLimit({
   windowMs: 60 * 1000,
   max: 300,

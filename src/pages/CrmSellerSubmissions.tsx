@@ -94,7 +94,7 @@ export default function CrmSellerSubmissions() {
   const STATUSES = ['incomplete','pending_review','needs_more_information','approved','rejected','converted_to_listing'];
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16">
       {/* List */}
       <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
@@ -206,7 +206,7 @@ export default function CrmSellerSubmissions() {
                   <ImageIcon size={16} /> Photos ({selected.image_paths.length})
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
-                  {selected.image_paths.map((path, i) => (
+                  {((selected as any).signed_image_urls?.length ? (selected as any).signed_image_urls : selected.image_paths).map((path: string, i: number) => (
                     <a key={i} href={path} target="_blank" rel="noopener noreferrer"
                       className="aspect-square bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center hover:opacity-80 transition-opacity">
                       <img src={path} alt={'Photo ' + (i + 1)} className="w-full h-full object-cover"

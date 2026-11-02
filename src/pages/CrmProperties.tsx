@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, Plus, Search, Eye, Pencil, CheckCircle, Archive, XCircle, ChevronLeft } from 'lucide-react';
+import { BACKEND_URL } from '../services/crmService';
+import { supabase } from '../supabase-config';
 
-const API = '/api/v1';
+const API = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
 
 interface Property {
   id: string;
@@ -12,7 +14,7 @@ interface Property {
   location?: string;
   status?: string;
   bedrooms?: number;
-  created_at?: { seconds?: number };
+  created_at?: { seconds?: number } | string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,9 +32,11 @@ function formatINR(v?: number) {
   return '₹' + v.toLocaleString('en-IN');
 }
 
-function fmtDate(ts?: { seconds?: number }) {
-  if (!ts?.seconds) return '—';
-  return new Date(ts.seconds * 1000).toLocaleDateString('en-IN');
+function fmtDate(ts?: { seconds?: number } | string) {
+  if (!ts) return '—';
+  if (typeof ts === 'string') return new Date(ts).toLocaleDateString('en-IN');
+  if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleDateString('en-IN');
+  return '—';
 }
 
 // ─── Edit / Create Modal ──────────────────────────────────────────────────────
@@ -69,8 +73,38 @@ function PropertyModal({ initial, onClose, onSaved }: {
       if (!res.ok) throw new Error(await res.text());
       onSaved();
       onClose();
-    } catch (e) { setError(String(e)); }
-    setSaving(false);
+    } catch (e) {
+      console.warn('[CRM] API save failed, falling back to Supabase:', e);
+      try {
+        if (isNew) {
+          const { error: insErr } = await supabase.from('properties').insert({
+            title: form.title,
+            property_type: form.propertyType,
+            price: form.price ? Number(form.price) : null,
+            location: form.location,
+            status: form.status,
+            bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
+          });
+          if (insErr) throw insErr;
+        } else {
+          const { error: updErr } = await supabase.from('properties').update({
+            title: form.title,
+            property_type: form.propertyType,
+            price: form.price ? Number(form.price) : null,
+            location: form.location,
+            status: form.status,
+            bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
+          }).eq('id', initial!.id);
+          if (updErr) throw updErr;
+        }
+        onSaved();
+        onClose();
+      } catch (dbErr) {
+        setError(String(dbErr));
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -136,22 +170,49 @@ export default function CrmProperties() {
 
   async function load() {
     setLoading(true);
-    const qs = filterStatus ? '?status=' + filterStatus : '';
-    const res = await fetch(API + '/properties' + qs);
-    const data = await res.json();
-    setProperties(Array.isArray(data.data) ? data.data : []);
-    setLoading(false);
+    try {
+      const qs = filterStatus ? '?status=' + filterStatus : '';
+      const res = await fetch(API + '/properties' + qs);
+      if (!res.ok) throw new Error('API failed');
+      const data = await res.json();
+      setProperties(Array.isArray(data.data) ? data.data : []);
+    } catch (err) {
+      console.warn('[CRM] API load failed, falling back to Supabase:', err);
+      let q = supabase
+        .from('properties')
+        .select('id, title, property_type, price, location, status, bedrooms, created_at')
+        .order('created_at', { ascending: false });
+      if (filterStatus) q = q.eq('status', filterStatus);
+      const { data } = await q;
+      setProperties((data || []).map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        propertyType: r.property_type,
+        price: Number(r.price),
+        location: r.location,
+        status: r.status,
+        bedrooms: r.bedrooms,
+        created_at: r.created_at,
+      })));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [filterStatus]);
 
   async function changeStatus(id: string, status: string) {
     setActionId(id);
-    await fetch(API + '/properties/' + id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
+    try {
+      const res = await fetch(API + '/properties/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error('API failed');
+    } catch {
+      await supabase.from('properties').update({ status }).eq('id', id);
+    }
     await load();
     setActionId(null);
   }
@@ -163,7 +224,7 @@ export default function CrmProperties() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* Header */}

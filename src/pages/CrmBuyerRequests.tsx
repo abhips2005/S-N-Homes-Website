@@ -80,7 +80,7 @@ export default function CrmBuyerRequests() {
   });
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16">
       {/* List panel */}
       <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
