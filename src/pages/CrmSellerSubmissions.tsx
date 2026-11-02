@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { SellerSubmissionService } from '../services/crmService';
 import type { SellerSubmission, SellerReviewStatus } from '../types/crm';
-import { Building2, RefreshCw, Check, X, MessageSquare, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Building2, RefreshCw, Check, X, MessageSquare, Image as ImageIcon, ExternalLink, ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 function statusStyle(s: SellerReviewStatus): string {
   const m: Record<SellerReviewStatus, string> = {
@@ -94,9 +95,9 @@ export default function CrmSellerSubmissions() {
   const STATUSES = ['incomplete','pending_review','needs_more_information','approved','rejected','converted_to_listing'];
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16">
+    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16 pb-16 md:pb-0">
       {/* List */}
-      <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`w-full md:w-96 bg-white border-r border-gray-200 flex flex-col ${selected ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -159,9 +160,16 @@ export default function CrmSellerSubmissions() {
       </div>
 
       {/* Detail */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${selected ? 'block' : 'hidden md:block'}`}>
         {selected ? (
           <div className="max-w-2xl space-y-6">
+            {/* Mobile back button */}
+            <button
+              onClick={() => setSelected(null)}
+              className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              <ChevronLeft size={16} /> Back to submissions list
+            </button>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-start justify-between">
                 <div>
@@ -283,6 +291,7 @@ export default function CrmSellerSubmissions() {
           </div>
         )}
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

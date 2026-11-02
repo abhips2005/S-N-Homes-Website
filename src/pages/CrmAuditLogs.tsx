@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Shield, RefreshCw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AuditLogService } from '../services/crmService';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 interface AuditLog {
   id: string;
@@ -61,7 +62,7 @@ export default function CrmAuditLogs() {
   const entities = [...new Set(logs.map(l => l.entity))];
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-20 px-4 pb-28 md:pt-24 md:px-6 md:pb-12">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -91,7 +92,7 @@ export default function CrmAuditLogs() {
           </select>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
           {loading ? (
             <div className="p-12 text-center text-gray-400">Loading...</div>
           ) : filtered.length === 0 ? (
@@ -100,7 +101,7 @@ export default function CrmAuditLogs() {
               <p>No audit records found</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Timestamp</th>
@@ -136,6 +137,7 @@ export default function CrmAuditLogs() {
           )}
         </div>
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

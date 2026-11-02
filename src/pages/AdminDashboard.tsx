@@ -179,7 +179,14 @@ const AdminDashboard: React.FC = () => {
             className="bg-white rounded-2xl p-6 shadow-lg"
           >
             <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Link
+                to="/admin/crm"
+                className="flex items-center p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors col-span-1 sm:col-span-2 font-medium"
+              >
+                <TrendingUp className="w-6 h-6 text-emerald-600 mr-3" />
+                <span className="text-emerald-900">CRM & WhatsApp Leads</span>
+              </Link>
               <Link
                 to="/admin/properties"
                 className="flex items-center p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"

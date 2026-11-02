@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Building2, Plus, Search, Eye, Pencil, CheckCircle, Archive, XCircle, ChevronLeft } from 'lucide-react';
 import { BACKEND_URL } from '../services/crmService';
 import { supabase } from '../supabase-config';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 const API = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
 
@@ -109,7 +110,7 @@ function PropertyModal({ initial, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
         <h2 className="text-xl font-bold text-gray-900">{isNew ? 'New Property' : 'Edit Property'}</h2>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {[
@@ -224,11 +225,11 @@ export default function CrmProperties() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-20 px-4 pb-28 md:pt-24 md:px-6 md:pb-12">
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link to="/admin/crm" className="p-2 hover:bg-gray-100 rounded-lg">
               <ChevronLeft size={20} className="text-gray-500" />
@@ -279,7 +280,7 @@ export default function CrmProperties() {
             <div className="p-12 text-center text-gray-400">No properties found.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     {['Title','Type','Location','Price','Bedrooms','Status','Added','Actions'].map(h => (
@@ -348,6 +349,7 @@ export default function CrmProperties() {
           onSaved={load}
         />
       )}
+      <CrmBottomNav />
     </div>
   );
 }

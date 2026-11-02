@@ -3,6 +3,7 @@ import { FollowUpService } from '../services/crmService';
 import type { FollowUpTask, TaskStatus, TaskType } from '../types/crm';
 import { CalendarCheck, Plus, RefreshCw, Check, Clock, Phone, MapPin, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 const TYPE_ICONS: Record<TaskType, JSX.Element> = {
   callback: <Phone size={14} />,
@@ -90,7 +91,7 @@ export default function CrmFollowUps() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-20 px-4 pb-28 md:pt-24 md:px-6 md:pb-12">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -177,7 +178,7 @@ export default function CrmFollowUps() {
             {filtered.map(task => (
               <div key={task.id}
                 className={'bg-white rounded-2xl p-5 shadow-sm border transition-all ' + cardBorder(task)}>
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className={taskTypeColor(task.task_type) + ' w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0'}>
                       {TYPE_ICONS[task.task_type]}
@@ -185,12 +186,12 @@ export default function CrmFollowUps() {
                     <div>
                       <p className="font-semibold text-gray-900 capitalize">{task.task_type.replace(/_/g, ' ')}</p>
                       {task.customer?.name && (
-                        <p className="text-sm text-gray-600">{task.customer.name} \u00b7 {task.customer.phone_e164}</p>
+                        <p className="text-sm text-gray-600">{task.customer.name} · {task.customer.phone_e164}</p>
                       )}
                       {task.notes && <p className="text-sm text-gray-500 mt-1">{task.notes}</p>}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <div className="flex items-center sm:items-end justify-between sm:justify-start sm:flex-col gap-2 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-0 border-gray-100">
                     <div className="flex items-center gap-1.5 text-sm">
                       <Clock size={13} className={isOverdue(task.due_at) && task.status === 'pending' ? 'text-red-500' : 'text-gray-400'} />
                       <span className={isOverdue(task.due_at) && task.status === 'pending' ? 'text-red-600 font-medium' : 'text-gray-500'}>
@@ -223,6 +224,7 @@ export default function CrmFollowUps() {
           </div>
         )}
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

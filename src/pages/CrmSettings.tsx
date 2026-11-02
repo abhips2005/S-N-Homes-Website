@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, ChevronLeft, CheckCircle, XCircle, AlertCircle, RefreshCw, Save } from 'lucide-react';
 import { BACKEND_URL } from '../services/crmService';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 interface HealthStatus {
   ok: boolean;
@@ -88,7 +89,7 @@ export default function CrmSettings() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-20 px-4 pb-28 md:pt-24 md:px-6 md:pb-12">
       <div className="max-w-3xl mx-auto space-y-6">
 
         {/* Header */}
@@ -247,6 +248,7 @@ export default function CrmSettings() {
           </button>
         </div>
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

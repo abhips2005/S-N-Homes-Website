@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { BuyerRequestService, PropertyMatchService } from '../services/crmService';
 import type { BuyerRequest, PropertyMatch, BuyerLeadStatus } from '../types/crm';
-import { Users, Search, RefreshCw, MapPin, Star } from 'lucide-react';
+import { Users, Search, RefreshCw, MapPin, Star, ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 const ALL_STATUSES: BuyerLeadStatus[] = [
   'new','contacted','requirements_collected','matching',
@@ -80,9 +81,9 @@ export default function CrmBuyerRequests() {
   });
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16">
+    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16 pb-16 md:pb-0">
       {/* List panel */}
-      <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`w-full md:w-96 bg-white border-r border-gray-200 flex flex-col ${selected ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -146,9 +147,16 @@ export default function CrmBuyerRequests() {
       </div>
 
       {/* Detail panel */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className={`flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 ${selected ? 'block' : 'hidden md:block'}`}>
         {selected ? (
           <div className="max-w-2xl space-y-6">
+            {/* Mobile back button */}
+            <button
+              onClick={() => setSelected(null)}
+              className="md:hidden mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
+            >
+              <ChevronLeft size={16} /> Back to requests
+            </button>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-start justify-between">
                 <div>
@@ -231,7 +239,7 @@ export default function CrmBuyerRequests() {
             </div>
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-400">
+          <div className="h-full hidden md:flex items-center justify-center text-gray-400">
             <div className="text-center">
               <Users size={64} className="mx-auto mb-4 opacity-20" />
               <p className="text-lg font-medium">Select a buyer request</p>
@@ -239,6 +247,7 @@ export default function CrmBuyerRequests() {
           </div>
         )}
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

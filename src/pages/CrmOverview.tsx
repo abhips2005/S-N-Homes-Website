@@ -7,19 +7,20 @@ import {
   AlertCircle, Home, RefreshCw, ArrowRight, Wifi
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 function StatCard({ icon, label, value, color, linkTo }: {
   icon: React.ReactNode; label: string; value: number;
   color: string; linkTo?: string;
 }) {
   const content = (
-    <div className={"bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow" + (linkTo ? " cursor-pointer" : "")}>
-      <div className="flex items-center justify-between mb-3">
-        <div className={color + " w-10 h-10 rounded-xl flex items-center justify-center"}>{icon}</div>
-        {linkTo && <ArrowRight size={16} className="text-gray-400" />}
+    <div className={"bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 hover:shadow-md active:scale-[0.98] transition-all" + (linkTo ? " cursor-pointer" : "")}>
+      <div className="flex items-center justify-between mb-2 md:mb-3">
+        <div className={color + " w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center"}>{icon}</div>
+        {linkTo && <ArrowRight size={14} className="text-gray-400" />}
       </div>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-      <p className="text-sm text-gray-500 mt-1">{label}</p>
+      <p className="text-2xl md:text-3xl font-bold text-gray-900">{value}</p>
+      <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-1">{label}</p>
     </div>
   );
   return linkTo ? <Link to={linkTo}>{content}</Link> : content;
@@ -53,7 +54,7 @@ export default function CrmOverview() {
   useEffect(() => { load(); checkServer(); }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-6 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-20 px-4 pb-28 md:pt-24 md:px-6 md:pb-12">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -147,6 +148,7 @@ export default function CrmOverview() {
           </div>
         )}
       </div>
+      <CrmBottomNav />
     </div>
   );
 }

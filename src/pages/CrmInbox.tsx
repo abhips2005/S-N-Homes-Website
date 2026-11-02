@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { ConversationService, MessageService } from '../services/crmService';
 import type { Conversation, CrmMessage } from '../types/crm';
-import { MessageSquare, Play, Pause, Send, User, Bot, RefreshCw } from 'lucide-react';
+import { MessageSquare, Play, Pause, Send, User, Bot, RefreshCw, ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import CrmBottomNav from '../components/CrmBottomNav';
 
 export default function CrmInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -82,9 +83,9 @@ export default function CrmInbox() {
   useEffect(() => { loadConversations(); }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16">
+    <div className="flex h-screen bg-gray-50 overflow-hidden pt-16 pb-16 md:pb-0">
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`w-full md:w-80 bg-white border-r border-gray-200 flex flex-col ${selected ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <MessageSquare size={20} className="text-green-600" /> Inbox
@@ -139,15 +140,24 @@ export default function CrmInbox() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${selected ? 'flex' : 'hidden md:flex'}`}>
         {selected ? (
           <>
             <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-gray-900">
-                  {selected.customer?.name || selected.customer?.phone_e164 || 'Customer'}
-                </h3>
-                <p className="text-sm text-gray-500">{selected.customer?.phone_e164}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  onClick={() => setSelected(null)}
+                  className="md:hidden p-1.5 -ml-1 text-gray-600 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform"
+                  title="Back to inbox"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-gray-900 truncate">
+                    {selected.customer?.name || selected.customer?.phone_e164 || 'Customer'}
+                  </h3>
+                  <p className="text-sm text-gray-500 truncate">{selected.customer?.phone_e164}</p>
+                </div>
               </div>
               <button
                 onClick={togglePause}
@@ -223,7 +233,7 @@ export default function CrmInbox() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
+          <div className="flex-1 hidden md:flex items-center justify-center text-gray-400">
             <div className="text-center">
               <MessageSquare size={64} className="mx-auto mb-4 opacity-20" />
               <p className="text-lg font-medium">Select a conversation</p>
@@ -232,6 +242,7 @@ export default function CrmInbox() {
           </div>
         )}
       </div>
+      <CrmBottomNav />
     </div>
   );
 }
