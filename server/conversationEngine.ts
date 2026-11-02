@@ -7,13 +7,131 @@ import { createHash } from 'crypto';
 import { getSupabase, writeAudit } from './supabaseAdmin';
 import { downloadAndStoreMedia } from './mediaService';
 
-// ─── Kerala districts ─────────────────────────────────────────────────────────
+// ─── Kerala regions & districts ───────────────────────────────────────────────
 
-const KERALA_DISTRICTS = [
-  'Alappuzha', 'Ernakulam', 'Idukki', 'Kannur', 'Kasaragod',
-  'Kollam', 'Kottayam', 'Kozhikode', 'Malappuram', 'Palakkad',
-  'Pathanamthitta', 'Thiruvananthapuram', 'Thrissur', 'Wayanad',
+export const KERALA_REGIONS = {
+  south: {
+    name: 'South Kerala',
+    label: '🌴 South Kerala',
+    districts: ['Alappuzha', 'Kollam', 'Kottayam', 'Pathanamthitta', 'Thiruvananthapuram'],
+  },
+  central: {
+    name: 'Central Kerala',
+    label: '🏙️ Central Kerala',
+    districts: ['Ernakulam', 'Idukki', 'Palakkad', 'Thrissur'],
+  },
+  north: {
+    name: 'North Kerala',
+    label: '🌄 North Kerala',
+    districts: ['Kannur', 'Kasaragod', 'Kozhikode', 'Malappuram', 'Wayanad'],
+  },
+} as const;
+
+export const KERALA_DISTRICTS: string[] = [
+  ...KERALA_REGIONS.south.districts,
+  ...KERALA_REGIONS.central.districts,
+  ...KERALA_REGIONS.north.districts,
 ];
+
+export const DISTRICT_ALIASES: Record<string, string> = {
+  trivandrum: 'Thiruvananthapuram',
+  tvm: 'Thiruvananthapuram',
+  thiruvananthapuram: 'Thiruvananthapuram',
+  quilon: 'Kollam',
+  kollam: 'Kollam',
+  pathanamthitta: 'Pathanamthitta',
+  alleppey: 'Alappuzha',
+  alappuzha: 'Alappuzha',
+  kottayam: 'Kottayam',
+  idukki: 'Idukki',
+  cochin: 'Ernakulam',
+  kochi: 'Ernakulam',
+  ernakulam: 'Ernakulam',
+  thrissur: 'Thrissur',
+  trichur: 'Thrissur',
+  palakkad: 'Palakkad',
+  palghat: 'Palakkad',
+  malappuram: 'Malappuram',
+  calicut: 'Kozhikode',
+  kozhikode: 'Kozhikode',
+  wayanad: 'Wayanad',
+  wyanad: 'Wayanad',
+  kannur: 'Kannur',
+  cannanore: 'Kannur',
+  kasaragod: 'Kasaragod',
+  kasargod: 'Kasaragod',
+  // Malayalam
+  'തിരുവനന്തപുരം': 'Thiruvananthapuram',
+  'കൊല്ലം': 'Kollam',
+  'പത്തനംതിട്ട': 'Pathanamthitta',
+  'ആലപ്പുഴ': 'Alappuzha',
+  'കോട്ടയം': 'Kottayam',
+  'ഇടുക്കി': 'Idukki',
+  'എറണാകുളം': 'Ernakulam',
+  'കൊച്ചി': 'Ernakulam',
+  'തൃശ്ശൂർ': 'Thrissur',
+  'പാലക്കാട്': 'Palakkad',
+  'മലപ്പുറം': 'Malappuram',
+  'കോഴിക്കോട്': 'Kozhikode',
+  'വയനാട്': 'Wayanad',
+  'കണ്ണൂർ': 'Kannur',
+  'കാസർഗോഡ്': 'Kasaragod',
+  'കാസർകോട്': 'Kasaragod',
+};
+
+export function resolveDistrict(input: string): string | null {
+  const raw = input.trim().toLowerCase();
+  if (DISTRICT_ALIASES[raw]) return DISTRICT_ALIASES[raw];
+  const clean = raw.replace(/[^a-z]/g, '');
+  if (clean && DISTRICT_ALIASES[clean]) return DISTRICT_ALIASES[clean];
+  for (const d of KERALA_DISTRICTS) {
+    const dLower = d.toLowerCase();
+    if (raw === dLower || (clean && clean === dLower.replace(/[^a-z]/g, ''))) return d;
+    if (dLower.length > 4 && raw.includes(dLower)) return d;
+  }
+  return null;
+}
+
+export function resolveBudget(body: string): string | null {
+  const clean = body.trim().toLowerCase();
+  if (clean.startsWith('b:budget:')) return clean.replace('b:budget:', '');
+  if (clean.includes('25')) return 'upto_25l';
+  if (clean.includes('50')) return 'upto_50l';
+  if (clean.includes('75')) return 'upto_75l';
+  if (clean.includes('1cr') || clean.includes('1 cr') || clean.includes('crore')) return 'upto_1cr';
+  if (clean.includes('above') || clean.includes('more')) return 'above_1cr';
+  return null;
+}
+
+export function resolveRentBudget(body: string): string | null {
+  const clean = body.trim().toLowerCase();
+  if (clean.startsWith('r:budget:')) return clean.replace('r:budget:', '');
+  if (clean.includes('15')) return 'rent_15k';
+  if (clean.includes('25')) return 'rent_25k';
+  if (clean.includes('50')) return 'rent_50k';
+  return null;
+}
+
+export function resolveDetail(body: string, ptype: string, prefix: 'b' | 'r'): string | null {
+  const clean = body.trim().toLowerCase();
+  const tag = `${prefix}:detail:`;
+  if (clean.startsWith(tag)) return clean.replace(tag, '');
+  if (ptype === 'house') {
+    if (clean.includes('2')) return '2plus';
+    if (clean.includes('3')) return '3plus';
+    if (clean.includes('4') || clean.includes('5')) return '4plus';
+  } else if (ptype === 'plot') {
+    if (clean.includes('50') || clean.includes('cent')) return '50cent';
+    if (clean.includes('1') || clean.includes('acre')) return '1acre';
+    if (clean.includes('big') || clean.includes('more')) return 'big';
+  } else {
+    if (clean.includes('5')) return '5rooms';
+    if (clean.includes('10')) return '10rooms';
+    if (clean.includes('big') || clean.includes('more')) return 'big';
+  }
+  return null;
+}
+
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
 
@@ -150,7 +268,7 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<str
   return wamid;
 }
 
-// ─── Interactive button message (max 3 buttons) ───────────────────────────────
+// ─── Interactive button message (max 3 buttons, max 20 chars title) ───────────
 
 export async function sendInteractiveButtons(
   to: string, bodyText: string,
@@ -160,23 +278,33 @@ export async function sendInteractiveButtons(
   const token = process.env.WHATSAPP_ACCESS_TOKEN ?? '';
   if (!phoneNumberId || !token) return null;
 
+  // WhatsApp limits: max 3 buttons, title max 20 chars
+  const sanitizedButtons = buttons.slice(0, 3).map(b => ({
+    id: b.id.slice(0, 256),
+    title: b.title.slice(0, 20),
+  }));
+
   const res = await fetch('https://graph.facebook.com/v26.0/' + phoneNumberId + '/messages', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'interactive',
       interactive: {
-        type: 'button', body: { text: bodyText },
-        action: { buttons: buttons.map(b => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
+        type: 'button', body: { text: bodyText.slice(0, 1024) },
+        action: { buttons: sanitizedButtons.map(b => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
       },
     }),
   });
-  if (!res.ok) { console.error('[WA interactive error]', await res.text()); return null; }
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('[WA interactive error]', errText);
+    return null;
+  }
   const data = await res.json() as { messages?: Array<{ id?: string }> };
   return data.messages?.[0]?.id ?? null;
 }
 
-// ─── Interactive list message ─────────────────────────────────────────────────
+// ─── Interactive list message (max 10 rows total, titles max 24 chars) ────────
 
 interface ListItem { id: string; title: string; description?: string }
 interface ListSection { title: string; rows: ListItem[] }
@@ -189,6 +317,13 @@ async function sendInteractiveList(
   const token = process.env.WHATSAPP_ACCESS_TOKEN ?? '';
   if (!phoneNumberId || !token) return null;
 
+  // WhatsApp limit: Total rows across all sections must be between 1 and 10!
+  const totalRows = sections.reduce((acc, s) => acc + s.rows.length, 0);
+  if (totalRows === 0 || totalRows > 10) {
+    console.error(`[WA list error] Total rows must be 1..10 (got ${totalRows})`);
+    return null;
+  }
+
   const res = await fetch('https://graph.facebook.com/v26.0/' + phoneNumberId + '/messages', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -196,13 +331,27 @@ async function sendInteractiveList(
       messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: headerText },
-        body: { text: bodyText },
-        action: { button: buttonLabel, sections },
+        header: { type: 'text', text: headerText.slice(0, 60) },
+        body: { text: bodyText.slice(0, 1024) },
+        action: {
+          button: buttonLabel.slice(0, 20),
+          sections: sections.map(s => ({
+            title: s.title.slice(0, 24),
+            rows: s.rows.map(r => ({
+              id: r.id.slice(0, 200),
+              title: r.title.slice(0, 24),
+              description: r.description ? r.description.slice(0, 72) : undefined,
+            })),
+          })),
+        },
       },
     }),
   });
-  if (!res.ok) { console.error('[WA list error]', await res.text()); return null; }
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('[WA list error]', errText);
+    return null;
+  }
   const data = await res.json() as { messages?: Array<{ id?: string }> };
   return data.messages?.[0]?.id ?? null;
 }
@@ -287,25 +436,44 @@ async function sendWelcomeMenu(to: string, convId: string, customerId: string): 
   await saveMessage(convId, customerId, 'outbound', text, wamid ?? undefined);
 }
 
-// ─── District list sender ─────────────────────────────────────────────────────
+// ─── District region & list senders ───────────────────────────────────────────
 
-async function sendDistrictList(
+async function askDistrictRegion(
   to: string, convId: string, customerId: string,
-  prefix: string, question: string,
+  prefix: 'b' | 'r' | 's', question: string,
 ): Promise<void> {
-  const half = Math.ceil(KERALA_DISTRICTS.length / 2);
-  const sections: ListSection[] = [
-    {
-      title: 'South & Central Kerala',
-      rows: KERALA_DISTRICTS.slice(0, half).map(d => ({ id: `${prefix}:district:${d}`, title: d })),
-    },
-    {
-      title: 'North Kerala',
-      rows: KERALA_DISTRICTS.slice(half).map(d => ({ id: `${prefix}:district:${d}`, title: d })),
-    },
-  ];
-  const wamid = await sendInteractiveList(to, 'Select District', question, 'Choose District', sections);
-  await saveMessage(convId, customerId, 'outbound', question, wamid ?? undefined);
+  await sendBtns(
+    to, convId, customerId,
+    `${question}\n\nSelect a region below, or reply with your district name 📍`,
+    [
+      { id: `${prefix}:reg:south`,   title: '🌴 South Kerala' },
+      { id: `${prefix}:reg:central`, title: '🏙️ Central Kerala' },
+      { id: `${prefix}:reg:north`,   title: '🌄 North Kerala' },
+    ],
+  );
+}
+
+async function sendDistrictListForRegion(
+  to: string, convId: string, customerId: string,
+  prefix: 'b' | 'r' | 's', regionKey: 'south' | 'central' | 'north',
+): Promise<void> {
+  const reg = KERALA_REGIONS[regionKey];
+  const rows = reg.districts.map(d => ({ id: `${prefix}:district:${d}`, title: d }));
+  const wamid = await sendInteractiveList(
+    to,
+    reg.name,
+    `Select your district in ${reg.name}:`,
+    'Choose District',
+    [{ title: `${reg.name} (${rows.length})`, rows }],
+  );
+  if (!wamid) {
+    const fallbackText = `*${reg.label}:*\n\n` +
+      reg.districts.map((d, i) => `${i + 1}. ${d}`).join('\n') +
+      `\n\nPlease reply with your district name 📍`;
+    await sendMsg(to, convId, customerId, fallbackText);
+    return;
+  }
+  await saveMessage(convId, customerId, 'outbound', `Select your district in ${reg.name}`, wamid);
 }
 
 // ─── Step question helpers ────────────────────────────────────────────────────
@@ -320,7 +488,15 @@ async function sendBtns(
   text: string, buttons: Array<{ id: string; title: string }>,
 ): Promise<void> {
   const wamid = await sendInteractiveButtons(to, text, buttons);
-  await saveMessage(convId, customerId, 'outbound', text, wamid ?? undefined);
+  if (!wamid) {
+    // Fallback to text message if interactive buttons fail
+    const fallbackText = `${text}\n\n` +
+      buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n') +
+      `\n\n_(Reply with your choice)_`;
+    await sendMsg(to, convId, customerId, fallbackText);
+    return;
+  }
+  await saveMessage(convId, customerId, 'outbound', text, wamid);
 }
 
 async function askBuyerType(to: string, convId: string, customerId: string): Promise<void> {
@@ -553,13 +729,17 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
 
   // ── AWAITING INTENT ────────────────────────────────────────────────────────
   if (status === 'awaiting_intent') {
-    if (bodyTrimmed === 'intent:buy') {
+    const isBuy = bodyTrimmed === 'intent:buy' || /buy|വാങ്ങുക/i.test(bodyTrimmed) || bodyTrimmed === '1';
+    const isSell = bodyTrimmed === 'intent:sell' || /sell|വിൽക്കുക/i.test(bodyTrimmed) || bodyTrimmed === '2';
+    const isRent = bodyTrimmed === 'intent:rent' || /rent|വാടക/i.test(bodyTrimmed) || bodyTrimmed === '3';
+
+    if (isBuy) {
       await saveConversation(conv.id, { intent: 'buy', workflow_status: 'b_type', buyer_data: {} });
       await askBuyerType(from, conv.id, customerId);
-    } else if (bodyTrimmed === 'intent:sell') {
+    } else if (isSell) {
       await saveConversation(conv.id, { intent: 'sell', workflow_status: 's_type', seller_data: {} });
       await askSellerType(from, conv.id, customerId);
-    } else if (bodyTrimmed === 'intent:rent') {
+    } else if (isRent) {
       await saveConversation(conv.id, { intent: 'rent', workflow_status: 'r_type', buyer_data: {} });
       await askRentType(from, conv.id, customerId);
     } else {
@@ -573,25 +753,52 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   // ══════════════════════════════════════════════════════════════════════════
 
   if (status === 'b_type') {
-    if (!bodyTrimmed.startsWith('b:type:')) {
+    let ptype: string | null = null;
+    if (bodyTrimmed.startsWith('b:type:')) ptype = bodyTrimmed.replace('b:type:', '');
+    else if (/house|home|villa|വീട്|1/i.test(bodyTrimmed)) ptype = 'house';
+    else if (/plot|land|സ്ഥലം|2/i.test(bodyTrimmed)) ptype = 'plot';
+    else if (/commercial|shop|office|കട|3/i.test(bodyTrimmed)) ptype = 'commercial';
+
+    if (!ptype) {
       await sendMsg(from, conv.id, customerId,
         '⚠️ Please use the buttons above to select the property type.');
       await askBuyerType(from, conv.id, customerId); return;
     }
-    const ptype = bodyTrimmed.replace('b:type:', '');
+
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), property_type: ptype }, workflow_status: 'b_district' });
-    await sendDistrictList(from, conv.id, customerId, 'b', 'Which district are you looking in? 📍');
+    await askDistrictRegion(from, conv.id, customerId, 'b', 'Which region in Kerala are you looking in? 📍');
     return;
   }
 
   if (status === 'b_district') {
-    if (!bodyTrimmed.startsWith('b:district:')) {
-      await sendDistrictList(from, conv.id, customerId, 'b', '⚠️ Please select a district from the list below:'); return;
+    // 1. Region selection
+    let regKey: 'south' | 'central' | 'north' | null = null;
+    if (bodyTrimmed.startsWith('b:reg:')) regKey = bodyTrimmed.replace('b:reg:', '') as any;
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+
+    if (regKey && KERALA_REGIONS[regKey]) {
+      await sendDistrictListForRegion(from, conv.id, customerId, 'b', regKey);
+      return;
     }
-    const district = bodyTrimmed.replace('b:district:', '');
-    await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), district }, workflow_status: 'b_location' });
-    await sendMsg(from, conv.id, customerId,
-      `Great! You selected *${district}*.\n\nPlease type your preferred town / area name and send it 📍`);
+
+    // 2. District selection or direct text entry
+    let district: string | null = null;
+    if (bodyTrimmed.startsWith('b:district:')) {
+      district = bodyTrimmed.replace('b:district:', '');
+    } else {
+      district = resolveDistrict(bodyTrimmed);
+    }
+
+    if (district) {
+      await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), district }, workflow_status: 'b_location' });
+      await sendMsg(from, conv.id, customerId,
+        `Great! You selected *${district}*.\n\nPlease type your preferred town / area name and send it 📍`);
+      return;
+    }
+
+    await askDistrictRegion(from, conv.id, customerId, 'b', '⚠️ Please select a region below or type your district name:');
     return;
   }
 
@@ -606,20 +813,21 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   }
 
   if (status === 'b_detail') {
-    if (!bodyTrimmed.startsWith('b:detail:')) {
-      await askBuyerDetail(from, conv.id, customerId, conv.buyer_data?.property_type ?? 'house', 'b'); return;
+    const ptype = conv.buyer_data?.property_type ?? 'house';
+    const detail = resolveDetail(bodyTrimmed, ptype, 'b');
+    if (!detail) {
+      await askBuyerDetail(from, conv.id, customerId, ptype, 'b'); return;
     }
-    const detail = bodyTrimmed.replace('b:detail:', '');
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), detail }, workflow_status: 'b_budget' });
     await askBuyerBudget(from, conv.id, customerId);
     return;
   }
 
   if (status === 'b_budget') {
-    if (!bodyTrimmed.startsWith('b:budget:')) {
+    const budget = resolveBudget(bodyTrimmed);
+    if (!budget) {
       await askBuyerBudget(from, conv.id, customerId); return;
     }
-    const budget = bodyTrimmed.replace('b:budget:', '');
     const data = { ...(conv.buyer_data ?? {}), budget };
     await saveConversation(conv.id, { buyer_data: data, workflow_status: 'b_done' });
     await saveBuyerLead(conv, data);
@@ -639,23 +847,48 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   // ══════════════════════════════════════════════════════════════════════════
 
   if (status === 'r_type') {
-    if (!bodyTrimmed.startsWith('r:type:')) {
+    let ptype: string | null = null;
+    if (bodyTrimmed.startsWith('r:type:')) ptype = bodyTrimmed.replace('r:type:', '');
+    else if (/house|home|villa|flat|apartment|വീട്|1/i.test(bodyTrimmed)) ptype = 'house';
+    else if (/commercial|shop|office|കട|2/i.test(bodyTrimmed)) ptype = 'commercial';
+
+    if (!ptype) {
       await askRentType(from, conv.id, customerId); return;
     }
-    const ptype = bodyTrimmed.replace('r:type:', '');
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), property_type: ptype }, workflow_status: 'r_district' });
-    await sendDistrictList(from, conv.id, customerId, 'r', 'Which district are you looking in? 📍');
+    await askDistrictRegion(from, conv.id, customerId, 'r', 'Which region in Kerala are you looking to rent in? 📍');
     return;
   }
 
   if (status === 'r_district') {
-    if (!bodyTrimmed.startsWith('r:district:')) {
-      await sendDistrictList(from, conv.id, customerId, 'r', '⚠️ Please select a district from the list below:'); return;
+    // 1. Region selection
+    let regKey: 'south' | 'central' | 'north' | null = null;
+    if (bodyTrimmed.startsWith('r:reg:')) regKey = bodyTrimmed.replace('r:reg:', '') as any;
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+
+    if (regKey && KERALA_REGIONS[regKey]) {
+      await sendDistrictListForRegion(from, conv.id, customerId, 'r', regKey);
+      return;
     }
-    const district = bodyTrimmed.replace('r:district:', '');
-    await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), district }, workflow_status: 'r_location' });
-    await sendMsg(from, conv.id, customerId,
-      `Great! You selected *${district}*.\n\nPlease type your preferred town / area name and send it 📍`);
+
+    // 2. District selection or direct text entry
+    let district: string | null = null;
+    if (bodyTrimmed.startsWith('r:district:')) {
+      district = bodyTrimmed.replace('r:district:', '');
+    } else {
+      district = resolveDistrict(bodyTrimmed);
+    }
+
+    if (district) {
+      await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), district }, workflow_status: 'r_location' });
+      await sendMsg(from, conv.id, customerId,
+        `Great! You selected *${district}*.\n\nPlease type your preferred town / area name and send it 📍`);
+      return;
+    }
+
+    await askDistrictRegion(from, conv.id, customerId, 'r', '⚠️ Please select a region below or type your district name:');
     return;
   }
 
@@ -670,20 +903,21 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   }
 
   if (status === 'r_detail') {
-    if (!bodyTrimmed.startsWith('r:detail:')) {
-      await askBuyerDetail(from, conv.id, customerId, conv.buyer_data?.property_type ?? 'house', 'r'); return;
+    const ptype = conv.buyer_data?.property_type ?? 'house';
+    const detail = resolveDetail(bodyTrimmed, ptype, 'r');
+    if (!detail) {
+      await askBuyerDetail(from, conv.id, customerId, ptype, 'r'); return;
     }
-    const detail = bodyTrimmed.replace('r:detail:', '');
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), detail }, workflow_status: 'r_budget' });
     await askRentBudget(from, conv.id, customerId);
     return;
   }
 
   if (status === 'r_budget') {
-    if (!bodyTrimmed.startsWith('r:budget:')) {
+    const budget = resolveRentBudget(bodyTrimmed);
+    if (!budget) {
       await askRentBudget(from, conv.id, customerId); return;
     }
-    const budget = bodyTrimmed.replace('r:budget:', '');
     const data = { ...(conv.buyer_data ?? {}), budget };
     await saveConversation(conv.id, { buyer_data: data, workflow_status: 'r_done' });
     await saveBuyerLead(conv, data);
@@ -703,23 +937,49 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   // ══════════════════════════════════════════════════════════════════════════
 
   if (status === 's_type') {
-    if (!bodyTrimmed.startsWith('s:type:')) {
+    let ptype: string | null = null;
+    if (bodyTrimmed.startsWith('s:type:')) ptype = bodyTrimmed.replace('s:type:', '');
+    else if (/house|home|villa|വീട്|1/i.test(bodyTrimmed)) ptype = 'house';
+    else if (/plot|land|സ്ഥലം|2/i.test(bodyTrimmed)) ptype = 'plot';
+    else if (/commercial|shop|office|കട|3/i.test(bodyTrimmed)) ptype = 'commercial';
+
+    if (!ptype) {
       await askSellerType(from, conv.id, customerId); return;
     }
-    const ptype = bodyTrimmed.replace('s:type:', '');
     await saveConversation(conv.id, { seller_data: { property_type: ptype }, workflow_status: 's_district' });
-    await sendDistrictList(from, conv.id, customerId, 's', 'Which district is the property in? 📍');
+    await askDistrictRegion(from, conv.id, customerId, 's', 'Which region is the property located in? 📍');
     return;
   }
 
   if (status === 's_district') {
-    if (!bodyTrimmed.startsWith('s:district:')) {
-      await sendDistrictList(from, conv.id, customerId, 's', '⚠️ Please select a district from the list below:'); return;
+    // 1. Region selection
+    let regKey: 'south' | 'central' | 'north' | null = null;
+    if (bodyTrimmed.startsWith('s:reg:')) regKey = bodyTrimmed.replace('s:reg:', '') as any;
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+
+    if (regKey && KERALA_REGIONS[regKey]) {
+      await sendDistrictListForRegion(from, conv.id, customerId, 's', regKey);
+      return;
     }
-    const district = bodyTrimmed.replace('s:district:', '');
-    await saveConversation(conv.id, { seller_data: { ...(conv.seller_data ?? {}), district }, workflow_status: 's_location' });
-    await sendMsg(from, conv.id, customerId,
-      `Great! You selected *${district}*.\n\nPlease type the town / area name and send it 📍`);
+
+    // 2. District selection or direct text entry
+    let district: string | null = null;
+    if (bodyTrimmed.startsWith('s:district:')) {
+      district = bodyTrimmed.replace('s:district:', '');
+    } else {
+      district = resolveDistrict(bodyTrimmed);
+    }
+
+    if (district) {
+      await saveConversation(conv.id, { seller_data: { ...(conv.seller_data ?? {}), district }, workflow_status: 's_location' });
+      await sendMsg(from, conv.id, customerId,
+        `Great! You selected *${district}*.\n\nPlease type the town / area name and send it 📍`);
+      return;
+    }
+
+    await askDistrictRegion(from, conv.id, customerId, 's', '⚠️ Please select a region below or type your district name:');
     return;
   }
 

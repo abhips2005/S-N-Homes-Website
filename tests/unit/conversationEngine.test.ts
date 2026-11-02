@@ -189,3 +189,88 @@ describe('Outbound idempotency key', () => {
     expect(k).toMatch(/^[a-f0-9]{64}$/);
   });
 });
+
+// ─── WhatsApp Interactive Limits & Resolvers ──────────────────────────────────
+
+import {
+  KERALA_REGIONS,
+  KERALA_DISTRICTS,
+  resolveDistrict,
+  resolveBudget,
+  resolveRentBudget,
+  resolveDetail,
+} from '../../server/conversationEngine';
+
+describe('WhatsApp interactive limits & Kerala districts', () => {
+  it('total districts in Kerala equals 14', () => {
+    expect(KERALA_DISTRICTS.length).toBe(14);
+  });
+
+  it('no region exceeds WhatsApp maximum allowed list row count of 10', () => {
+    for (const [key, reg] of Object.entries(KERALA_REGIONS)) {
+      expect(reg.districts.length).toBeLessThanOrEqual(10);
+      expect(reg.districts.length).toBeGreaterThan(0);
+      // Row titles must be <= 24 characters
+      for (const d of reg.districts) {
+        expect(d.length).toBeLessThanOrEqual(24);
+      }
+    }
+  });
+
+  it('region button titles are <= 20 characters (WhatsApp button title limit)', () => {
+    for (const reg of Object.values(KERALA_REGIONS)) {
+      expect(reg.label.length).toBeLessThanOrEqual(20);
+    }
+  });
+});
+
+describe('District resolver', () => {
+  it('resolves exact district names', () => {
+    expect(resolveDistrict('Ernakulam')).toBe('Ernakulam');
+    expect(resolveDistrict('Thrissur')).toBe('Thrissur');
+    expect(resolveDistrict('Wayanad')).toBe('Wayanad');
+  });
+
+  it('resolves common city/district aliases', () => {
+    expect(resolveDistrict('kochi')).toBe('Ernakulam');
+    expect(resolveDistrict('cochin')).toBe('Ernakulam');
+    expect(resolveDistrict('trivandrum')).toBe('Thiruvananthapuram');
+    expect(resolveDistrict('tvm')).toBe('Thiruvananthapuram');
+    expect(resolveDistrict('calicut')).toBe('Kozhikode');
+    expect(resolveDistrict('alleppey')).toBe('Alappuzha');
+  });
+
+  it('resolves Malayalam district names', () => {
+    expect(resolveDistrict('എറണാകുളം')).toBe('Ernakulam');
+    expect(resolveDistrict('കൊച്ചി')).toBe('Ernakulam');
+    expect(resolveDistrict('തിരുവനന്തപുരം')).toBe('Thiruvananthapuram');
+    expect(resolveDistrict('കോഴിക്കോട്')).toBe('Kozhikode');
+  });
+
+  it('returns null for unknown inputs', () => {
+    expect(resolveDistrict('New York')).toBeNull();
+    expect(resolveDistrict('bangalore')).toBeNull();
+  });
+});
+
+describe('Budget and detail resolvers', () => {
+  it('resolves budget tags and text input', () => {
+    expect(resolveBudget('b:budget:upto_50l')).toBe('upto_50l');
+    expect(resolveBudget('50 lakhs')).toBe('upto_50l');
+    expect(resolveBudget('25L')).toBe('upto_25l');
+    expect(resolveBudget('1 crore')).toBe('upto_1cr');
+  });
+
+  it('resolves rent budget tags and text input', () => {
+    expect(resolveRentBudget('r:budget:rent_15k')).toBe('rent_15k');
+    expect(resolveRentBudget('15000')).toBe('rent_15k');
+    expect(resolveRentBudget('25k')).toBe('rent_25k');
+  });
+
+  it('resolves property details', () => {
+    expect(resolveDetail('b:detail:3plus', 'house', 'b')).toBe('3plus');
+    expect(resolveDetail('3 bedrooms', 'house', 'b')).toBe('3plus');
+    expect(resolveDetail('1 acre', 'plot', 'b')).toBe('1acre');
+    expect(resolveDetail('5 rooms', 'commercial', 'b')).toBe('5rooms');
+  });
+});
