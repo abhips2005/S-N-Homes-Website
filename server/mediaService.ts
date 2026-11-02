@@ -5,7 +5,7 @@
  */
 import { getSupabase } from './supabaseAdmin';
 
-const WA_API_BASE = 'https://graph.facebook.com/v19.0';
+const WA_API_BASE = 'https://graph.facebook.com/v26.0';
 const BUCKET = 'seller-submissions';
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 

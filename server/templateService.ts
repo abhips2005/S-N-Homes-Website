@@ -15,7 +15,7 @@
 
 import { getSupabase } from './supabaseAdmin';
 
-const WA_API_BASE = 'https://graph.facebook.com/v19.0';
+const WA_API_BASE = 'https://graph.facebook.com/v26.0';
 
 export const WaTemplate = {
   PropertyFollowUp:  'sn_property_followup',

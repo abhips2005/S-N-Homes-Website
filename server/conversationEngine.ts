@@ -65,6 +65,9 @@ const OPT_IN_KEYWORDS = ['start', 'resume', 'subscribe', 'ആരംഭിക്�
 const HUMAN_AGENT_KEYWORDS = ['human', 'agent', 'talk to agent', 'speak to agent',
   'talk to human', 'call me', 'real person', 'മനുഷ്യൻ', 'ഏജന്റ്'];
 
+const GREETING_KEYWORDS = ['hi', 'hello', 'hey', 'hai', 'hii', 'helo', 'hiya',
+  'help', 'menu', 'നമസ്കാരം', 'ഹലോ', 'ഹായ്', 'ഹേ'];
+
 // ─── Gemini client ────────────────────────────────────────────────────────────
 
 let genai: GoogleGenerativeAI | null = null;
@@ -279,7 +282,7 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<str
   }
 
   const res = await fetch(
-    'https://graph.facebook.com/v19.0/' + phoneNumberId + '/messages',
+    'https://graph.facebook.com/v26.0/' + phoneNumberId + '/messages',
     {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -310,6 +313,69 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<str
   });
 
   return wamid;
+}
+
+// ─── Interactive button message ───────────────────────────────────────────────
+
+export async function sendInteractiveButtons(
+  to: string,
+  bodyText: string,
+  buttons: Array<{ id: string; title: string }>,
+): Promise<string | null> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
+  const token = process.env.WHATSAPP_ACCESS_TOKEN ?? '';
+  if (!phoneNumberId || !token) return null;
+
+  const res = await fetch(
+    'https://graph.facebook.com/v26.0/' + phoneNumberId + '/messages',
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: bodyText },
+          action: {
+            buttons: buttons.map(b => ({
+              type: 'reply',
+              reply: { id: b.id, title: b.title },
+            })),
+          },
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    console.error('[WA interactive error]', await res.text());
+    return null;
+  }
+
+  const data = await res.json() as { messages?: Array<{ id?: string }> };
+  return data.messages?.[0]?.id ?? null;
+}
+
+const INTENT_BUTTONS = [
+  { id: 'buy',  title: '🏠 Buy Property'  },
+  { id: 'sell', title: '🏷️ Sell Property' },
+  { id: 'rent', title: '🔑 Rent Property' },
+];
+
+async function sendWelcomeMenu(
+  to: string,
+  convId: string,
+  customerId: string,
+  isMl: boolean,
+): Promise<void> {
+  const bodyText = isMl
+    ? 'S&N Homes-ലേക്ക് സ്വാഗതം! 🏡\n\nനിങ്ങൾ ഇന്ന് എന്ത് ചെയ്യാൻ ആഗ്രഹിക്കുന്നു?'
+    : 'Welcome to *S&N Homes*! 🏡\n\nWhat are you planning to do today?';
+  const wamid = await sendInteractiveButtons(to, bodyText, INTENT_BUTTONS);
+  await saveMessage(convId, customerId, 'outbound', bodyText, wamid ?? undefined);
 }
 
 // ─── Owner notification ───────────────────────────────────────────────────────
@@ -758,6 +824,13 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       'Customer ' + from + ' has requested to speak with a human agent.\n' +
       'Conversation paused. Reply via the Inbox: ' + (process.env.WEBSITE_BASE_URL ?? 'https://snhomes.in') + '/admin/crm/inbox'
     );
+    return;
+  }
+
+  // ── Greeting → send welcome menu with Buy / Sell / Rent buttons ────────────
+  if (GREETING_KEYWORDS.some(k => bodyLower === k)) {
+    await saveConversation(conv.id, { workflow_status: 'awaiting_intent' });
+    await sendWelcomeMenu(from, conv.id, customerId, conv.language === 'ml');
     return;
   }
 
