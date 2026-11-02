@@ -187,6 +187,16 @@ async function saveMessage(
   mediaId?: string,
   mimeType?: string
 ): Promise<void> {
+  if (providerId) {
+    const { data: existing } = await db()
+      .from('crm_messages')
+      .select('id')
+      .eq('provider_message_id', providerId)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return;
+  }
+
   const { error } = await db().from('crm_messages').insert({
     conversation_id: conversationId,
     customer_id: customerId,
@@ -199,7 +209,9 @@ async function saveMessage(
     provider_status: direction === 'outbound' ? 'sent' : 'received',
     created_at: new Date().toISOString(),
   });
-  if (error) console.error('[saveMessage] error:', error.message);
+  if (error && !error.message.includes('unique constraint')) {
+    console.error('[saveMessage] error:', error.message);
+  }
 }
 
 // ─── Property search ──────────────────────────────────────────────────────────
@@ -253,7 +265,7 @@ async function searchProperties(fields: Partial<BuyerFields>): Promise<PropertyR
 // ─── Outbound idempotency ─────────────────────────────────────────────────────
 
 function outboundKey(to: string, text: string): string {
-  const slot = Math.floor(Date.now() / (10 * 60 * 1000));
+  const slot = Math.floor(Date.now() / (30 * 1000));
   return createHash('sha256').update(to + '|' + text + '|' + slot).digest('hex');
 }
 
@@ -372,8 +384,8 @@ async function sendWelcomeMenu(
   isMl: boolean,
 ): Promise<void> {
   const bodyText = isMl
-    ? 'S&N Homes-ലേക്ക് സ്വാഗതം! 🏡\n\nനിങ്ങൾ ഇന്ന് എന്ത് ചെയ്യാൻ ആഗ്രഹിക്കുന്നു?'
-    : 'Welcome to *S&N Homes*! 🏡\n\nWhat are you planning to do today?';
+    ? 'S N Homes-ലേക്ക് സ്വാഗതം! 🏡\n\nനിങ്ങൾ ഇന്ന് എന്ത് ചെയ്യാൻ ആഗ്രഹിക്കുന്നു?'
+    : 'Welcome to *S N Homes*! 🏡\n\nWhat are you planning to do today?';
   const wamid = await sendInteractiveButtons(to, bodyText, INTENT_BUTTONS);
   await saveMessage(convId, customerId, 'outbound', bodyText, wamid ?? undefined);
 }
@@ -445,7 +457,13 @@ async function extractWithGemini(
   userMessage: string,
   history: string
 ): Promise<ExtractionResult | null> {
-  const model = getGenAI().getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const preferredModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const candidateModels = Array.from(new Set([
+    preferredModel,
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+  ]));
 
   const ctx = JSON.stringify({
     current_intent: conv.intent,
@@ -461,15 +479,22 @@ async function extractWithGemini(
     `\nMessage: "${userMessage}"\n\nJSON:`,
   ].join('');
 
-  try {
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim()
-      .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    return ExtractionResultSchema.parse(JSON.parse(raw));
-  } catch (err) {
-    console.error('[Gemini error]', err);
-    return null;
+  const genAI = getGenAI();
+
+  for (const m of candidateModels) {
+    try {
+      const model = genAI.getGenerativeModel({ model: m });
+      const result = await model.generateContent(prompt);
+      const raw = result.response.text().trim()
+        .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      return ExtractionResultSchema.parse(JSON.parse(raw));
+    } catch (err) {
+      console.warn(`[Gemini] Model ${m} error:`, (err as Error).message);
+    }
   }
+
+  console.error('[Gemini error] All candidate models failed');
+  return null;
 }
 
 // ─── Format INR ───────────────────────────────────────────────────────────────
@@ -831,6 +856,39 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
   if (GREETING_KEYWORDS.some(k => bodyLower === k)) {
     await saveConversation(conv.id, { workflow_status: 'awaiting_intent' });
     await sendWelcomeMenu(from, conv.id, customerId, conv.language === 'ml');
+    return;
+  }
+
+  // ── Intent buttons (Buy / Sell / Rent) from welcome menu ──────────────────
+  const isBuy = ['buy', '🏠 buy property', 'buy property'].includes(bodyLower);
+  const isSell = ['sell', '🏷️ sell property', 'sell property'].includes(bodyLower);
+  const isRent = ['rent', '🔑 rent property', 'rent property'].includes(bodyLower);
+
+  if (isBuy || isRent) {
+    const isMl = conv.language === 'ml';
+    await saveConversation(conv.id, {
+      intent: isBuy ? 'buy' : 'rent',
+      workflow_status: 'requirements_collecting',
+    });
+    const reply = isMl
+      ? 'തീർച്ചയായും! നിങ്ങൾ ഏത് തരത്തിലുള്ള property ആണ് അന്വേഷിക്കുന്നത്? (House, Flat/Apartment, Villa, Plot)\n\nസ്ഥലവും ബഡ്ജറ്റും share ചെയ്യൂ (ഉദാ: *2BHK flat in Pala under 50 Lakhs*).'
+      : 'Great! What kind of property are you looking for? (House, Flat/Apartment, Villa, or Plot)\n\nPlease share your preferred location and budget (e.g., *2BHK house in Pala under 60 Lakhs*).';
+    const wamid = await sendWhatsAppMessage(from, reply);
+    await saveMessage(conv.id, customerId, 'outbound', reply, wamid ?? undefined);
+    return;
+  }
+
+  if (isSell) {
+    const isMl = conv.language === 'ml';
+    await saveConversation(conv.id, {
+      intent: 'sell',
+      workflow_status: 'seller_collecting',
+    });
+    const reply = isMl
+      ? 'നിങ്ങളുടെ property sell ചെയ്യാൻ സഹായിക്കാം! 🏡\n\nProperty type (House/Flat/Land), സ്ഥലം, പ്രതീക്ഷിക്കുന്ന വില (asking price) എന്നിവ share ചെയ്യൂ (ഉദാ: *3BHK house in Pala, asking 75 Lakhs*).'
+      : 'We would love to help you find buyers for your property! 🏡\n\nPlease share the property type (House/Flat/Land), location, and your asking price (e.g., *3BHK house in Pala, asking 75 Lakhs*).';
+    const wamid = await sendWhatsAppMessage(from, reply);
+    await saveMessage(conv.id, customerId, 'outbound', reply, wamid ?? undefined);
     return;
   }
 

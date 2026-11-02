@@ -1,5 +1,5 @@
 /**
- * S&N Homes — WhatsApp CRM Server
+ * S N Homes — WhatsApp CRM Server
  *
  * Official Meta Cloud API webhook receiver + REST API for the admin dashboard.
  * Runs on PORT (default 3001), proxied from Vite at /api.
@@ -150,7 +150,15 @@ app.post('/api/webhooks/whatsapp', async (req: Request & { rawBody?: string }, r
         msgBody = (rawMsg['caption'] as string) || '';
       } else if (type === 'interactive') {
         const interactive = rawMsg['interactive'] as Record<string, Record<string, string>> | undefined;
-        msgBody = interactive?.button_reply?.id || interactive?.list_reply?.id || '';
+        msgBody =
+          interactive?.button_reply?.id ||
+          interactive?.button_reply?.title ||
+          interactive?.list_reply?.id ||
+          interactive?.list_reply?.title ||
+          '';
+      } else if (type === 'button') {
+        const btn = rawMsg['button'] as Record<string, string> | undefined;
+        msgBody = btn?.payload || btn?.text || '';
       } else {
         console.log('[Webhook] Ignoring unsupported message type:', type);
         continue;
