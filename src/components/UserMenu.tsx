@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, LogOut, Settings, Heart, History } from 'lucide-react';
+import { User, LogOut, Settings, Heart, History, Shield, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface UserMenuProps {
@@ -9,7 +9,7 @@ interface UserMenuProps {
 
 const UserMenu: React.FC<UserMenuProps> = ({ isTransparent = false }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,11 +47,37 @@ const UserMenu: React.FC<UserMenuProps> = ({ isTransparent = false }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-50">
+        <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg py-2 z-50">
           <div className="px-4 py-2 border-b border-gray-100">
             <p className="text-sm font-medium text-gray-900">{user.name || 'User'}</p>
-            <p className="text-sm text-gray-500">{user.email || ''}</p>
+            <p className="text-xs text-gray-500 truncate">{user.email || ''}</p>
+            {isAdmin && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 mt-1">
+                Admin
+              </span>
+            )}
           </div>
+
+          {isAdmin && (
+            <div className="py-1 border-b border-gray-100 bg-emerald-50/60">
+              <Link
+                to="/admin/crm"
+                className="flex items-center px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-100/70 font-semibold"
+                onClick={() => setIsOpen(false)}
+              >
+                <Building2 className="w-4 h-4 mr-3 text-emerald-600" />
+                CRM & Leads
+              </Link>
+              <Link
+                to="/admin/dashboard"
+                className="flex items-center px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-100/70"
+                onClick={() => setIsOpen(false)}
+              >
+                <Shield className="w-4 h-4 mr-3 text-emerald-600" />
+                Admin Dashboard
+              </Link>
+            </div>
+          )}
 
           <Link
             to="/dashboard"
