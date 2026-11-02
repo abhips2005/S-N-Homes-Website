@@ -124,10 +124,15 @@ export default function CrmBuyerRequests() {
                       {req.customer?.name || req.customer?.phone_e164 || 'Unknown customer'}
                     </p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {[req.requirements.property_type, ...(req.requirements.locations || [])].filter(Boolean).join(' \u00b7 ')}
+                      {[
+                        req.requirements.property_type,
+                        req.requirements.district,
+                        req.requirements.location || (req.requirements.locations || []).join(', '),
+                        req.requirements.bedrooms_min ? `${req.requirements.bedrooms_min}+ BHK` : req.requirements.detail
+                      ].filter(Boolean).join(' · ')}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Budget: {formatINR(req.requirements.budget_min)} \u2013 {formatINR(req.requirements.budget_max)}
+                      Budget: {req.requirements.budget_label || (req.requirements.budget_min && req.requirements.budget_max ? `${formatINR(req.requirements.budget_min)} – ${formatINR(req.requirements.budget_max)}` : formatINR(req.requirements.budget_max))}
                     </p>
                   </div>
                   <span className={'text-xs px-2 py-0.5 rounded-full whitespace-nowrap font-medium ' + statusStyle(req.status)}>
@@ -165,20 +170,25 @@ export default function CrmBuyerRequests() {
                 {([
                   ['Property Type', selected.requirements.property_type],
                   ['Purpose', selected.requirements.purpose],
-                  ['Bedrooms (min)', selected.requirements.bedrooms_min?.toString()],
-                  ['Budget Min', formatINR(selected.requirements.budget_min)],
-                  ['Budget Max', formatINR(selected.requirements.budget_max)],
+                  ['District', selected.requirements.district],
+                  ['Location', selected.requirements.location || (selected.requirements.locations || []).join(', ')],
+                  ['Bedrooms / Preference', selected.requirements.bedrooms_min
+                    ? `${selected.requirements.bedrooms_min}+ Bedrooms`
+                    : selected.requirements.detail],
+                  ['Budget', selected.requirements.budget_label || (selected.requirements.budget_min && selected.requirements.budget_max
+                    ? `${formatINR(selected.requirements.budget_min)} – ${formatINR(selected.requirements.budget_max)}`
+                    : (selected.requirements.budget_max ? formatINR(selected.requirements.budget_max) : undefined))],
                   ['Timeline', selected.requirements.timeline],
-                ] as [string, string | undefined][]).filter(([, v]) => v).map(([label, value]) => (
+                ] as [string, string | undefined][]).filter(([, v]) => v && v !== '—').map(([label, value]) => (
                   <div key={label} className="bg-gray-50 rounded-xl p-3">
                     <p className="text-xs text-gray-500 mb-0.5">{label}</p>
                     <p className="text-sm font-medium text-gray-900">{value}</p>
                   </div>
                 ))}
-                {(selected.requirements.locations || []).length > 0 && (
+                {(selected.requirements.locations || []).length > 1 && (
                   <div className="bg-gray-50 rounded-xl p-3 col-span-2">
                     <p className="text-xs text-gray-500 mb-1">
-                      <MapPin size={12} className="inline mr-1" />Locations
+                      <MapPin size={12} className="inline mr-1" />Preferred Locations
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {(selected.requirements.locations || []).map(l => (

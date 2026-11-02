@@ -130,7 +130,14 @@ export default function CrmSellerSubmissions() {
                       {sub.customer?.name || sub.customer?.phone_e164 || 'Unknown seller'}
                     </p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {[sub.details.property_type, sub.details.location].filter(Boolean).join(' \u00b7 ')}
+                      {[
+                        sub.details.property_type,
+                        sub.details.district,
+                        sub.details.location,
+                        (sub.details.bedrooms?.toString() || (sub.details.property_type === 'house' ? sub.details.detail : ''))
+                          ? `${sub.details.bedrooms || sub.details.detail} BHK`
+                          : (sub.details.detail ? `${sub.details.detail}` : '')
+                      ].filter(Boolean).join(' · ')}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">{formatINR(sub.details.asking_price)}</p>
                   </div>
@@ -172,15 +179,21 @@ export default function CrmSellerSubmissions() {
               <div className="grid grid-cols-2 gap-3">
                 {([
                   ['Type', selected.details.property_type],
+                  ['District', selected.details.district],
                   ['Location', selected.details.location],
+                  ['Bedrooms', (selected.details.bedrooms?.toString() || (selected.details.property_type === 'house' ? selected.details.detail : undefined))
+                    ? `${selected.details.bedrooms || selected.details.detail} Bedrooms`
+                    : undefined],
+                  ['Rooms', (selected.details.rooms?.toString() || (selected.details.property_type !== 'house' && selected.details.property_type !== 'plot' ? selected.details.detail : undefined))
+                    ? `${selected.details.rooms || selected.details.detail} Rooms`
+                    : undefined],
                   ['Asking Price', formatINR(selected.details.asking_price)],
                   ['Land Area', selected.details.land_area
                     ? String(selected.details.land_area) + ' ' + (selected.details.land_area_unit || 'cent')
-                    : undefined],
+                    : (selected.details.property_type === 'plot' ? selected.details.detail : undefined)],
                   ['Built-up Area', selected.details.built_up_area
                     ? String(selected.details.built_up_area) + ' sq ft'
                     : undefined],
-                  ['Bedrooms', selected.details.bedrooms?.toString()],
                   ['Bathrooms', selected.details.bathrooms?.toString()],
                   ['Road Access', selected.details.road_access !== undefined
                     ? (selected.details.road_access ? 'Yes' : 'No')

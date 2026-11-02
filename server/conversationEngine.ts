@@ -588,17 +588,32 @@ async function askRentBudget(to: string, convId: string, customerId: string): Pr
 // ─── Save buyer/renter lead ───────────────────────────────────────────────────
 
 async function saveBuyerLead(conv: ConvState, data: Partial<ConvData>): Promise<void> {
+  const reqObj: Record<string, unknown> = {
+    property_type: data.property_type,
+    purpose: conv.intent,
+    district: data.district,
+    location: data.location,
+    locations: data.location ? [data.location] : [],
+    detail: data.detail,
+    budget_label: budgetLabel(data.budget ?? ''),
+    budget_max: budgetToNumber(data.budget ?? '') || null,
+  };
+
+  if (data.detail) {
+    const num = parseInt(data.detail, 10);
+    if (!isNaN(num)) {
+      reqObj.bedrooms_min = num;
+    }
+  }
+
   await db().from('crm_buyer_requests').insert({
-    customer_id: conv.customer_id, conversation_id: conv.id,
-    requirements: {
-      property_type: data.property_type, purpose: conv.intent,
-      district: data.district, location: data.location,
-      detail: data.detail,
-      budget_label: budgetLabel(data.budget ?? ''),
-      budget_max: budgetToNumber(data.budget ?? '') || null,
-    },
-    status: 'new', notes: null,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    customer_id: conv.customer_id,
+    conversation_id: conv.id,
+    requirements: reqObj,
+    status: 'new',
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   });
   await notifyOwner(
     'New ' + (conv.intent === 'rent' ? 'Rental' : 'Buyer') + ' Lead',
@@ -612,14 +627,32 @@ async function saveBuyerLead(conv: ConvState, data: Partial<ConvData>): Promise<
 // ─── Save seller lead ─────────────────────────────────────────────────────────
 
 async function saveSellerLead(conv: ConvState, data: Partial<ConvData>): Promise<string> {
+  const detailsObj: Record<string, unknown> = {
+    property_type: data.property_type,
+    district: data.district,
+    location: data.location,
+    detail: data.detail,
+    asking_price: data.asking_price ?? null,
+  };
+
+  if (data.detail) {
+    const num = parseInt(data.detail, 10);
+    if (!isNaN(num)) {
+      if (data.property_type === 'house') {
+        detailsObj.bedrooms = num;
+      }
+      detailsObj.rooms = num;
+    }
+  }
+
   const { data: subDoc, error } = await db().from('crm_seller_submissions').insert({
-    customer_id: conv.customer_id, conversation_id: conv.id,
-    details: {
-      property_type: data.property_type, district: data.district,
-      location: data.location, detail: data.detail, asking_price: data.asking_price ?? null,
-    },
-    image_paths: [], approval_status: 'pending_review',
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    customer_id: conv.customer_id,
+    conversation_id: conv.id,
+    details: detailsObj,
+    image_paths: [],
+    approval_status: 'pending_review',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }).select('id').single();
   if (error) throw new Error('Failed to create seller submission: ' + error.message);
   const submissionId = subDoc.id as string;
@@ -633,8 +666,28 @@ async function finishSellerFlow(
   to: string, conv: ConvState, customerId: string, data: Partial<ConvData>,
 ): Promise<void> {
   if (conv.pending_submission_id) {
+    const detailsObj: Record<string, unknown> = {
+      property_type: data.property_type,
+      district: data.district,
+      location: data.location,
+      detail: data.detail,
+      asking_price: data.asking_price ?? null,
+    };
+    if (data.detail) {
+      const num = parseInt(data.detail, 10);
+      if (!isNaN(num)) {
+        if (data.property_type === 'house') {
+          detailsObj.bedrooms = num;
+        }
+        detailsObj.rooms = num;
+      }
+    }
     await db().from('crm_seller_submissions')
-      .update({ approval_status: 'pending_review', updated_at: new Date().toISOString() })
+      .update({
+        details: detailsObj,
+        approval_status: 'pending_review',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', conv.pending_submission_id);
   }
   await saveConversation(conv.id, { workflow_status: 's_done' });

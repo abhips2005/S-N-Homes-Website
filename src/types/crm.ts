@@ -100,7 +100,11 @@ export interface CrmMessage {
 export interface BuyerRequirements {
   property_type?: 'house' | 'flat' | 'apartment' | 'plot' | 'commercial' | 'villa' | 'other';
   purpose?: 'buy' | 'rent';
+  district?: string;
+  location?: string;
   locations?: string[];
+  detail?: string;
+  budget_label?: string;
   budget_min?: number;
   budget_max?: number;
   bedrooms_min?: number;
@@ -145,12 +149,15 @@ export interface PropertyMatch {
 
 export interface SellerDetails {
   property_type?: string;
+  district?: string;
   location?: string;
+  detail?: string;
   land_area?: number;
   land_area_unit?: 'cent' | 'acre';
   built_up_area?: number;
   bedrooms?: number;
   bathrooms?: number;
+  rooms?: number;
   asking_price?: number;
   description?: string;
   road_access?: boolean;
