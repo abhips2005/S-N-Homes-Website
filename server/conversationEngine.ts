@@ -123,10 +123,10 @@ export function resolveDetail(body: string, ptype: string, prefix: 'b' | 'r'): s
     if (clean.includes('4') || clean.includes('5')) return '4plus';
   } else if (ptype === 'plot') {
     if (clean.includes('big') || clean.includes('more') || clean.includes('above')) return 'above50cent';
-    if (clean.includes('20')) return '20cent';
+    if (clean.includes('25') || clean.includes('20')) return '25cent';
     if (clean.includes('50')) return '50cent';
     if (clean.includes('1') || clean.includes('acre')) return '1acre';
-    if (clean.includes('cent')) return '20cent';
+    if (clean.includes('cent')) return '25cent';
   } else {
     if (clean.includes('5')) return '5rooms';
     if (clean.includes('10')) return '10rooms';
@@ -561,7 +561,7 @@ async function askBuyerDetail(
     ]);
   } else if (ptype === 'plot') {
     await sendBtns(to, convId, customerId, 'What plot area are you looking for?', [
-      { id: `${prefix}:detail:20cent`,      title: 'Upto 20 cent' },
+      { id: `${prefix}:detail:25cent`,      title: 'Upto 25 cent' },
       { id: `${prefix}:detail:50cent`,      title: 'Upto 50 cent' },
       { id: `${prefix}:detail:above50cent`, title: 'More than 50 cent' },
     ]);
@@ -577,7 +577,7 @@ async function askBuyerDetail(
 async function askSellerDetail(to: string, convId: string, customerId: string, ptype: string): Promise<void> {
   if (ptype === 'plot') {
     await sendBtns(to, convId, customerId, 'What is the plot area?', [
-      { id: 's:detail:20cent',      title: 'Upto 20 cent' },
+      { id: 's:detail:25cent',      title: 'Upto 25 cent' },
       { id: 's:detail:50cent',      title: 'Upto 50 cent' },
       { id: 's:detail:above50cent', title: 'More than 50 cent' },
     ]);
@@ -592,7 +592,7 @@ async function askSellerDetail(to: string, convId: string, customerId: string, p
 
 async function askBuyerLandArea(to: string, convId: string, customerId: string): Promise<void> {
   await sendBtns(to, convId, customerId, 'What is your preferred land area / plot size?', [
-    { id: 'b:land:20cent',      title: 'Upto 20 cent' },
+    { id: 'b:land:25cent',      title: 'Upto 25 cent' },
     { id: 'b:land:50cent',      title: 'Upto 50 cent' },
     { id: 'b:land:above50cent', title: 'More than 50 cent' },
   ]);
@@ -603,7 +603,7 @@ async function askSellerLandArea(to: string, convId: string, customerId: string)
     to, convId, customerId,
     'What is the land area of the property?\n\nSelect an option or reply with exact area (e.g. 7 Cent, 15 Cent, 1 Acre):',
     [
-      { id: 's:land:20cent',      title: 'Upto 20 cent' },
+      { id: 's:land:25cent',      title: 'Upto 25 cent' },
       { id: 's:land:50cent',      title: 'Upto 50 cent' },
       { id: 's:land:above50cent', title: 'More than 50 cent' },
     ],
@@ -1031,8 +1031,8 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
 
     if (ptype === 'plot') {
       // For plot/land, detail is the land area
-      const displayArea = (detail === '20cent' || detail === '10cent') ? 'Upto 20 cent'
-        : (detail === '50cent' || detail === '25cent') ? 'Upto 50 cent'
+      const displayArea = (detail === '25cent' || detail === '20cent' || detail === '10cent') ? 'Upto 25 cent'
+        : (detail === '50cent') ? 'Upto 50 cent'
         : (detail === 'above50cent' || detail === 'big') ? 'More than 50 cent'
         : detail;
       await saveConversation(conv.id, {
@@ -1054,9 +1054,9 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
 
   if (status === 'b_land_area') {
     let landArea = '';
-    if (bodyTrimmed === 'b:land:20cent' || bodyTrimmed === 'b:land:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
-      landArea = 'Upto 20 cent';
-    } else if (bodyTrimmed === 'b:land:50cent' || bodyTrimmed === 'b:land:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+    if (bodyTrimmed === 'b:land:25cent' || bodyTrimmed === 'b:land:20cent' || bodyTrimmed === 'b:land:10cent' || /^upto\s*(25|20)/i.test(bodyTrimmed)) {
+      landArea = 'Upto 25 cent';
+    } else if (bodyTrimmed === 'b:land:50cent' || /^upto\s*50/i.test(bodyTrimmed)) {
       landArea = 'Upto 50 cent';
     } else if (bodyTrimmed === 'b:land:above50cent' || bodyTrimmed === 'b:land:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {
       landArea = 'More than 50 cent';
@@ -1269,10 +1269,10 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       let numericVal: number | null = null;
       let unit = 'cent';
 
-      if (bodyTrimmed === 's:detail:20cent' || bodyTrimmed === 's:detail:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
-        areaLabel = 'Upto 20 cent';
-        numericVal = 20;
-      } else if (bodyTrimmed === 's:detail:50cent' || bodyTrimmed === 's:detail:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+      if (bodyTrimmed === 's:detail:25cent' || bodyTrimmed === 's:detail:20cent' || bodyTrimmed === 's:detail:10cent' || /^upto\s*(25|20)/i.test(bodyTrimmed)) {
+        areaLabel = 'Upto 25 cent';
+        numericVal = 25;
+      } else if (bodyTrimmed === 's:detail:50cent' || /^upto\s*50/i.test(bodyTrimmed)) {
         areaLabel = 'Upto 50 cent';
         numericVal = 50;
       } else if (bodyTrimmed === 's:detail:above50cent' || bodyTrimmed === 's:detail:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {
@@ -1331,10 +1331,10 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     let landArea: string | number = '';
     let landUnit = 'cent';
 
-    if (bodyTrimmed === 's:land:20cent' || bodyTrimmed === 's:land:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
-      landArea = 'Upto 20 cent';
+    if (bodyTrimmed === 's:land:25cent' || bodyTrimmed === 's:land:20cent' || bodyTrimmed === 's:land:10cent' || /^upto\s*(25|20)/i.test(bodyTrimmed)) {
+      landArea = 'Upto 25 cent';
       landUnit = 'cent';
-    } else if (bodyTrimmed === 's:land:50cent' || bodyTrimmed === 's:land:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+    } else if (bodyTrimmed === 's:land:50cent' || /^upto\s*50/i.test(bodyTrimmed)) {
       landArea = 'Upto 50 cent';
       landUnit = 'cent';
     } else if (bodyTrimmed === 's:land:above50cent' || bodyTrimmed === 's:land:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {

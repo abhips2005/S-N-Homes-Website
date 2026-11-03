@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BuyerRequestService, PropertyMatchService } from '../services/crmService';
+import { findMatchesForBuyer, buildSendPropertyToBuyerWhatsAppUrl, type ScoredPropertyMatch } from '../services/crmMatchingService';
 import type { BuyerRequest, PropertyMatch, BuyerLeadStatus } from '../types/crm';
-import { Users, Search, RefreshCw, MapPin, Star, ChevronLeft } from 'lucide-react';
+import { Users, Search, RefreshCw, MapPin, Star, ChevronLeft, Sparkles, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CrmBottomNav from '../components/CrmBottomNav';
 
@@ -36,6 +37,8 @@ export default function CrmBuyerRequests() {
   const [requests, setRequests] = useState<BuyerRequest[]>([]);
   const [selected, setSelected] = useState<BuyerRequest | null>(null);
   const [matches, setMatches] = useState<PropertyMatch[]>([]);
+  const [scoredMatches, setScoredMatches] = useState<ScoredPropertyMatch[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -51,10 +54,34 @@ export default function CrmBuyerRequests() {
 
   const selectRequest = async (req: BuyerRequest) => {
     setSelected(req);
+    setLoadingMatches(true);
     try {
-      const m = await PropertyMatchService.getForRequest(req.id);
+      const [m, sm] = await Promise.all([
+        PropertyMatchService.getForRequest(req.id).catch(() => []),
+        findMatchesForBuyer(req).catch(() => []),
+      ]);
       setMatches(m);
-    } catch { setMatches([]); }
+      setScoredMatches(sm);
+    } catch {
+      setMatches([]);
+      setScoredMatches([]);
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  const refreshMatches = async () => {
+    if (!selected) return;
+    setLoadingMatches(true);
+    try {
+      const sm = await findMatchesForBuyer(selected);
+      setScoredMatches(sm);
+      toast.success(`Found ${sm.length} matching properties`);
+    } catch {
+      toast.error('Failed to find matches');
+    } finally {
+      setLoadingMatches(false);
+    }
   };
 
   const updateStatus = async (id: string, status: BuyerLeadStatus) => {
@@ -237,25 +264,119 @@ export default function CrmBuyerRequests() {
             </div>
 
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Star size={16} className="text-yellow-500" /> Matched Properties
-                <span className="text-sm font-normal text-gray-400">({matches.length} sent)</span>
-              </h4>
-              {matches.length === 0 ? (
-                <p className="text-sm text-gray-400">No properties matched yet</p>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Star size={16} className="text-yellow-500" /> Matched Properties
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {scoredMatches.length} Found
+                  </span>
+                </h4>
+                <button
+                  onClick={refreshMatches}
+                  disabled={loadingMatches}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                >
+                  <RefreshCw size={12} className={loadingMatches ? 'animate-spin' : ''} /> Refresh
+                </button>
+              </div>
+
+              {loadingMatches ? (
+                <div className="py-8 text-center text-gray-400 text-sm">
+                  <RefreshCw size={24} className="mx-auto mb-2 animate-spin text-emerald-500 opacity-60" />
+                  Finding matching properties...
+                </div>
+              ) : scoredMatches.length === 0 ? (
+                <div className="py-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <p className="text-sm font-medium text-gray-600">No properties currently match this buyer's criteria</p>
+                  <p className="text-xs text-gray-400 mt-1">Available properties with matching type, district, or budget will appear here automatically.</p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {matches.map(m => (
-                    <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                      <div>
-                        <p className="font-medium text-sm text-gray-900">{m.property_title}</p>
-                        {m.match_reason && <p className="text-xs text-gray-500 mt-0.5">{m.match_reason}</p>}
-                        {m.sent_at && <p className="text-xs text-gray-400">Sent: {new Date(m.sent_at).toLocaleString()}</p>}
+                  {scoredMatches.map(m => {
+                    const waUrl = buildSendPropertyToBuyerWhatsAppUrl(
+                      selected.customer?.phone_e164 || '',
+                      selected.customer?.name,
+                      m,
+                    );
+                    const isHigh = m.match_score >= 80;
+                    const isMed = m.match_score >= 65;
+
+                    return (
+                      <div key={m.property_id} className="p-4 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-200 transition-all">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h5 className="font-semibold text-sm text-gray-900 truncate">{m.title}</h5>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                                isHigh ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                isMed ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                <Sparkles size={11} /> {m.match_score}% Match
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 flex-wrap">
+                              <span className="font-semibold text-emerald-700">{m.price ? formatINR(m.price) : 'Contact'}</span>
+                              <span>·</span>
+                              <span>📍 {m.location ? `${m.location}, ` : ''}{m.district || 'Kerala'}</span>
+                              {m.bedrooms && (
+                                <>
+                                  <span>·</span>
+                                  <span>🛏️ {m.bedrooms} BHK</span>
+                                </>
+                              )}
+                              {m.land_area && (
+                                <>
+                                  <span>·</span>
+                                  <span>📐 {m.land_area} {m.land_area_unit || 'Cent'}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Match reasons tags */}
+                        {m.match_reasons.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-3 mt-2">
+                            {m.match_reasons.map((r, i) => (
+                              <span key={i} className="text-[11px] bg-white border border-gray-200 px-2 py-0.5 rounded-md text-gray-600">
+                                ✓ {r}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-200">
+                          <a
+                            href={m.property_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-emerald-700 font-medium py-1 px-2 rounded-lg hover:bg-white transition-colors"
+                          >
+                            <ExternalLink size={12} /> View Listing
+                          </a>
+
+                          {selected.customer?.phone_e164 ? (
+                            <a
+                              href={waUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm active:scale-95 transition-all"
+                              title="Opens regular WhatsApp with pre-written message"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/>
+                              </svg>
+                              Send via WhatsApp
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400">No phone number</span>
+                          )}
+                        </div>
                       </div>
-                      <a href={m.property_url} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline whitespace-nowrap ml-2">View \u2192</a>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

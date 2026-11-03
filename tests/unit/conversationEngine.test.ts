@@ -275,10 +275,11 @@ describe('Budget and detail resolvers', () => {
     expect(resolveDetail('3 bedrooms', 'house', 'b')).toBe('3plus');
     expect(resolveDetail('1 acre', 'plot', 'b')).toBe('1acre');
     expect(resolveDetail('5 rooms', 'commercial', 'b')).toBe('5rooms');
-    expect(resolveDetail('b:detail:20cent', 'plot', 'b')).toBe('20cent');
+    expect(resolveDetail('b:detail:25cent', 'plot', 'b')).toBe('25cent');
     expect(resolveDetail('b:detail:50cent', 'plot', 'b')).toBe('50cent');
     expect(resolveDetail('b:detail:above50cent', 'plot', 'b')).toBe('above50cent');
-    expect(resolveDetail('20 cent', 'plot', 'b')).toBe('20cent');
+    expect(resolveDetail('25 cent', 'plot', 'b')).toBe('25cent');
+    expect(resolveDetail('Upto 25 cent', 'plot', 'b')).toBe('25cent');
     expect(resolveDetail('Upto 50 cent', 'plot', 'b')).toBe('50cent');
     expect(resolveDetail('More than 50 cent', 'plot', 'b')).toBe('above50cent');
   });

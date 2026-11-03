@@ -1,7 +1,24 @@
 import { useEffect, useState } from 'react';
 import { SellerSubmissionService } from '../services/crmService';
+import {
+  findMatchesForSeller,
+  buildShareSellerPropertyWithBuyerWhatsAppUrl,
+  buildNotifySellerOfBuyerWhatsAppUrl,
+  type ScoredBuyerMatch,
+} from '../services/crmMatchingService';
 import type { SellerSubmission, SellerReviewStatus } from '../types/crm';
-import { Building2, RefreshCw, Check, X, MessageSquare, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Send } from 'lucide-react';
+import {
+  Building2,
+  RefreshCw,
+  Check,
+  X,
+  MessageSquare,
+  Image as ImageIcon,
+  ExternalLink,
+  ChevronLeft,
+  Users,
+  Sparkles,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import CrmBottomNav from '../components/CrmBottomNav';
@@ -19,16 +36,18 @@ function statusStyle(s: SellerReviewStatus): string {
 }
 
 function formatINR(amount?: number) {
-  if (!amount) return '\u2014';
-  if (amount >= 10000000) return '\u20b9' + (amount / 10000000).toFixed(1) + 'Cr';
-  if (amount >= 100000) return '\u20b9' + (amount / 100000).toFixed(1) + 'L';
-  return '\u20b9' + amount.toLocaleString('en-IN');
+  if (!amount) return '—';
+  if (amount >= 10000000) return '₹' + (amount / 10000000).toFixed(1) + 'Cr';
+  if (amount >= 100000) return '₹' + (amount / 100000).toFixed(1) + 'L';
+  return '₹' + amount.toLocaleString('en-IN');
 }
 
 export default function CrmSellerSubmissions() {
   const { user } = useAuth();
   const [submissions, setSubmissions] = useState<SellerSubmission[]>([]);
   const [selected, setSelected] = useState<SellerSubmission | null>(null);
+  const [buyerMatches, setBuyerMatches] = useState<ScoredBuyerMatch[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
@@ -43,6 +62,34 @@ export default function CrmSellerSubmissions() {
     finally { setLoading(false); }
   };
 
+  const selectSubmission = async (sub: SellerSubmission) => {
+    setSelected(sub);
+    setReviewNotes(sub.review_notes || '');
+    setLoadingMatches(true);
+    try {
+      const bm = await findMatchesForSeller(sub);
+      setBuyerMatches(bm);
+    } catch {
+      setBuyerMatches([]);
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  const refreshMatches = async () => {
+    if (!selected) return;
+    setLoadingMatches(true);
+    try {
+      const bm = await findMatchesForSeller(selected);
+      setBuyerMatches(bm);
+      toast.success(`Found ${bm.length} matching buyer leads`);
+    } catch {
+      toast.error('Failed to find matches');
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
   const approve = async () => {
     if (!selected || !user) return;
     setActing(true);
@@ -55,7 +102,7 @@ export default function CrmSellerSubmissions() {
         setSelected(updated);
         setSubmissions(prev => prev.map(s => s.id === selected.id ? updated : s));
         toast.success('Submission approved & published to listings');
-      } catch (pubErr) {
+      } catch {
         // If publish fails, still mark approved
         const updated = { ...selected, approval_status: 'approved' as SellerReviewStatus };
         setSelected(updated);
@@ -137,7 +184,7 @@ export default function CrmSellerSubmissions() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {loading ? <div className="p-8 text-center text-gray-400">Loading\u2026</div> :
+          {loading ? <div className="p-8 text-center text-gray-400">Loading…</div> :
             filtered.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
                 <Building2 size={40} className="mx-auto mb-2 opacity-30" />
@@ -145,7 +192,7 @@ export default function CrmSellerSubmissions() {
               </div>
             ) : filtered.map(sub => (
               <button key={sub.id}
-                onClick={() => { setSelected(sub); setReviewNotes(''); }}
+                onClick={() => selectSubmission(sub)}
                 className={'w-full text-left p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors' +
                   (selected?.id === sub.id ? ' bg-purple-50 border-l-4 border-l-purple-500' : '')}>
                 <div className="flex items-start justify-between gap-2">
@@ -158,40 +205,34 @@ export default function CrmSellerSubmissions() {
                         sub.details.property_type,
                         sub.details.district,
                         sub.details.location,
-                        (sub.details.bedrooms?.toString() || (sub.details.property_type === 'house' ? sub.details.detail : ''))
-                          ? `${sub.details.bedrooms || sub.details.detail} BHK`
-                          : (sub.details.detail ? `${sub.details.detail}` : '')
+                        sub.details.bedrooms ? `${sub.details.bedrooms} BHK` : sub.details.detail,
+                        sub.details.land_area ? `${sub.details.land_area} ${sub.details.land_area_unit || 'Cent'}` : undefined
                       ].filter(Boolean).join(' · ')}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatINR(sub.details.asking_price)}</p>
+                    <p className="text-xs font-semibold text-purple-700 mt-0.5">
+                      Asking: {formatINR(sub.details.asking_price)}
+                    </p>
                   </div>
                   <span className={'text-xs px-2 py-0.5 rounded-full whitespace-nowrap font-medium ' + statusStyle(sub.approval_status)}>
                     {sub.approval_status.replace(/_/g, ' ')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
-                  {sub.image_paths.length > 0 && (
-                    <span className="text-xs text-gray-400 flex items-center gap-0.5">
-                      <ImageIcon size={10} /> {sub.image_paths.length} photo{sub.image_paths.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  <span className="text-xs text-gray-400">{new Date(sub.created_at).toLocaleDateString()}</span>
-                </div>
+                <p className="text-xs text-gray-400 mt-1">{new Date(sub.created_at).toLocaleDateString()}</p>
               </button>
             ))}
         </div>
       </div>
 
-      {/* Detail */}
-      <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${selected ? 'block' : 'hidden md:block'}`}>
+      {/* Detail panel */}
+      <div className={`flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 ${selected ? 'block' : 'hidden md:block'}`}>
         {selected ? (
           <div className="max-w-2xl space-y-6">
             {/* Mobile back button */}
             <button
               onClick={() => setSelected(null)}
-              className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+              className="md:hidden mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
             >
-              <ChevronLeft size={16} /> Back to submissions list
+              <ChevronLeft size={16} /> Back to submissions
             </button>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-start justify-between">
@@ -282,11 +323,130 @@ export default function CrmSellerSubmissions() {
               </div>
             )}
 
+            {/* Matching Buyer Leads */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Users size={16} className="text-purple-600" /> Matching Buyer Leads
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    {buyerMatches.length} Found
+                  </span>
+                </h4>
+                <button
+                  onClick={refreshMatches}
+                  disabled={loadingMatches}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                >
+                  <RefreshCw size={12} className={loadingMatches ? 'animate-spin' : ''} /> Refresh
+                </button>
+              </div>
+
+              {loadingMatches ? (
+                <div className="py-8 text-center text-gray-400 text-sm">
+                  <RefreshCw size={24} className="mx-auto mb-2 animate-spin text-purple-500 opacity-60" />
+                  Finding matching buyers...
+                </div>
+              ) : buyerMatches.length === 0 ? (
+                <div className="py-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <p className="text-sm font-medium text-gray-600">No buyer requests currently match this property</p>
+                  <p className="text-xs text-gray-400 mt-1">Buyers looking for this type, district, or price range will appear here automatically.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {buyerMatches.map(m => {
+                    const waShareBuyerUrl = m.buyer_phone
+                      ? buildShareSellerPropertyWithBuyerWhatsAppUrl(m.buyer_phone, m.buyer_name, selected)
+                      : '';
+                    const waNotifySellerUrl = selected.customer?.phone_e164
+                      ? buildNotifySellerOfBuyerWhatsAppUrl(
+                          selected.customer.phone_e164,
+                          selected.customer.name,
+                          m,
+                          selected,
+                        )
+                      : '';
+                    const isHigh = m.match_score >= 80;
+                    const isMed = m.match_score >= 65;
+
+                    return (
+                      <div key={m.buyer_request_id} className="p-4 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-200 transition-all">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h5 className="font-semibold text-sm text-gray-900">{m.buyer_name}</h5>
+                              {m.buyer_phone && <span className="text-xs text-gray-500">({m.buyer_phone})</span>}
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                                isHigh ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                isMed ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                <Sparkles size={11} /> {m.match_score}% Match
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 flex-wrap">
+                              <span className="font-semibold text-purple-700">Budget: {m.budget_label || formatINR(m.budget_max)}</span>
+                              <span>·</span>
+                              <span>Looking for: {m.property_type || 'Property'} in {m.district || 'Kerala'}</span>
+                              {m.bedrooms_min && <span>· 🛏️ {m.bedrooms_min}+ BHK</span>}
+                              {m.land_area && <span>· 📐 {m.land_area}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reason tags */}
+                        {m.match_reasons.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-3 mt-2">
+                            {m.match_reasons.map((r, i) => (
+                              <span key={i} className="text-[11px] bg-white border border-gray-200 px-2 py-0.5 rounded-md text-gray-600">
+                                ✓ {r}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* WhatsApp Action Buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-200 flex-wrap">
+                          {m.buyer_phone ? (
+                            <a
+                              href={waShareBuyerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm active:scale-95 transition-all"
+                              title="Send this property details directly to the buyer on WhatsApp"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/>
+                              </svg>
+                              Share with Buyer
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400">Buyer has no phone</span>
+                          )}
+
+                          {selected.customer?.phone_e164 && (
+                            <a
+                              href={waNotifySellerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium transition-colors"
+                              title="Notify seller about this matching buyer"
+                            >
+                              Notify Seller
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {(selected.approval_status === 'pending_review' || selected.approval_status === 'incomplete') && (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="font-semibold text-gray-900 mb-4">Review</h4>
                 <textarea value={reviewNotes} onChange={e => setReviewNotes(e.target.value)}
-                  placeholder="Add notes (required for rejection or more-info request)\u2026"
+                  placeholder="Add notes (required for rejection or more-info request)…"
                   rows={3}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4" />
                 <div className="flex gap-3">
