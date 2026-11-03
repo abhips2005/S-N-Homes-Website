@@ -696,7 +696,7 @@ router.post('/properties', strictLimiter, async (req: Request, res: Response) =>
 router.patch('/properties/:id', strictLimiter, async (req: Request, res: Response) => {
   try {
     const allowed = ['title', 'property_type', 'price', 'location', 'status',
-      'bedrooms', 'bathrooms', 'land_area', 'area', 'description', 'images', 'district'];
+      'bedrooms', 'bathrooms', 'land_area', 'land_area_unit', 'area', 'description', 'images', 'district', 'contact_phone'];
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const k of allowed) {
       if (req.body[k] !== undefined) update[k] = req.body[k];

@@ -108,6 +108,7 @@ export interface BuyerRequirements {
   budget_min?: number;
   budget_max?: number;
   bedrooms_min?: number;
+  land_area?: string | number;
   land_area_min?: number;
   land_area_max?: number;
   built_up_area_min?: number;

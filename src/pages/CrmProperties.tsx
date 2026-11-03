@@ -13,10 +13,21 @@ interface Property {
   propertyType?: string;
   price?: number;
   location?: string;
+  district?: string;
+  land_area?: number;
+  land_area_unit?: string;
+  area?: number;
   status?: string;
   bedrooms?: number;
+  contact_phone?: string;
   created_at?: { seconds?: number } | string;
 }
+
+const KERALA_DISTRICTS = [
+  'Alappuzha', 'Ernakulam', 'Idukki', 'Kannur', 'Kasaragod',
+  'Kollam', 'Kottayam', 'Kozhikode', 'Malappuram', 'Palakkad',
+  'Pathanamthitta', 'Thiruvananthapuram', 'Thrissur', 'Wayanad'
+];
 
 const STATUS_COLORS: Record<string, string> = {
   active:    'bg-green-100 text-green-700',
@@ -49,12 +60,15 @@ function PropertyModal({ initial, onClose, onSaved }: {
   const isNew = !initial?.id;
   const [form, setForm] = useState({
     title: initial?.title ?? '',
-    propertyType: initial?.propertyType ?? 'house',
+    propertyType: initial?.propertyType ?? (initial as any)?.property_type ?? 'house',
     price: initial?.price ? String(initial.price) : '',
+    district: initial?.district ?? (initial as any)?.district ?? '',
     location: initial?.location ?? '',
     status: initial?.status ?? 'draft',
     bedrooms: initial?.bedrooms ? String(initial.bedrooms) : '',
-    mobile: '',
+    area: (initial as any)?.land_area ? String((initial as any).land_area) : (initial as any)?.area ? String((initial as any).area) : '',
+    areaUnit: ((initial as any)?.land_area_unit || 'cent').toLowerCase(),
+    mobile: (initial as any)?.contact_phone ?? '',
   });
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -99,12 +113,17 @@ function PropertyModal({ initial, onClose, onSaved }: {
     setSaving(true);
     setError('');
     try {
+      const areaNum = form.area ? Number(form.area) : null;
       const payload: Record<string, unknown> = {
         title: form.title,
         propertyType: form.propertyType,
         property_type: form.propertyType,
         price: form.price ? Number(form.price) : null,
+        district: form.district || null,
         location: form.location,
+        land_area: areaNum,
+        land_area_unit: form.areaUnit,
+        area: areaNum,
         status: form.status,
         bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
         ...(form.mobile ? { contact_phone: form.mobile } : {}),
@@ -130,7 +149,11 @@ function PropertyModal({ initial, onClose, onSaved }: {
             title: form.title,
             property_type: form.propertyType,
             price: form.price ? Number(form.price) : null,
+            district: form.district || null,
             location: form.location,
+            land_area: areaNum,
+            land_area_unit: form.areaUnit,
+            area: areaNum,
             status: form.status,
             bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
             ...(form.mobile ? { contact_phone: form.mobile } : {}),
@@ -142,7 +165,11 @@ function PropertyModal({ initial, onClose, onSaved }: {
             title: form.title,
             property_type: form.propertyType,
             price: form.price ? Number(form.price) : null,
+            district: form.district || null,
             location: form.location,
+            land_area: areaNum,
+            land_area_unit: form.areaUnit,
+            area: areaNum,
             status: form.status,
             bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
             ...(form.mobile ? { contact_phone: form.mobile } : {}),
@@ -173,24 +200,102 @@ function PropertyModal({ initial, onClose, onSaved }: {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
         <h2 className="text-xl font-bold text-gray-900">{isNew ? 'New Property' : 'Edit Property'}</h2>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        {[
-          { label: 'Title', key: 'title' as const, type: 'text' },
-          { label: 'Location', key: 'location' as const, type: 'text' },
-          { label: 'Price (₹)', key: 'price' as const, type: 'number' },
-          { label: 'Bedrooms', key: 'bedrooms' as const, type: 'number' },
-          { label: 'Mobile Number', key: 'mobile' as const, type: 'tel' },
-        ].map(f => (
-          <div key={f.key}>
-            <label className="text-sm font-medium text-gray-700">{f.label}</label>
+        
+        <div>
+          <label className="text-sm font-medium text-gray-700">Title</label>
+          <input
+            type="text"
+            value={form.title}
+            onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700">District</label>
+            <select
+              value={form.district}
+              onChange={e => setForm(p => ({ ...p, district: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select District</option>
+              {KERALA_DISTRICTS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700">Location / Town</label>
             <input
-              type={f.type}
-              value={form[f.key]}
-              onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-              placeholder={f.key === 'mobile' ? 'e.g. +919876543210' : undefined}
+              type="text"
+              value={form.location}
+              onChange={e => setForm(p => ({ ...p, location: e.target.value }))}
+              placeholder="e.g. Pala, Kakkanad"
               className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-        ))}
+        </div>
+
+        {/* Land Area and Unit */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <label className="text-sm font-medium text-gray-700">Land Area</label>
+            <input
+              type="number"
+              step="any"
+              placeholder="e.g. 5, 10, 0.5"
+              value={form.area}
+              onChange={e => setForm(p => ({ ...p, area: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700">Unit</label>
+            <select
+              value={form.areaUnit}
+              onChange={e => setForm(p => ({ ...p, areaUnit: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="cent">Cent</option>
+              <option value="acre">Acre</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700">Price (₹)</label>
+            <input
+              type="number"
+              value={form.price}
+              onChange={e => setForm(p => ({ ...p, price: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700">Bedrooms</label>
+            <input
+              type="number"
+              value={form.bedrooms}
+              onChange={e => setForm(p => ({ ...p, bedrooms: e.target.value }))}
+              placeholder="e.g. 3"
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-gray-700">Mobile Number</label>
+          <input
+            type="tel"
+            value={form.mobile}
+            onChange={e => setForm(p => ({ ...p, mobile: e.target.value }))}
+            placeholder="e.g. +919876543210"
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-gray-700">Type</label>
@@ -284,7 +389,7 @@ export default function CrmProperties() {
       console.warn('[CRM] API load failed, falling back to Supabase:', err);
       let q = supabase
         .from('properties')
-        .select('id, title, property_type, price, location, status, bedrooms, created_at')
+        .select('id, title, property_type, price, location, district, land_area, land_area_unit, area, status, bedrooms, contact_phone, created_at')
         .order('created_at', { ascending: false });
       if (filterStatus) q = q.eq('status', filterStatus);
       const { data } = await q;
@@ -294,8 +399,13 @@ export default function CrmProperties() {
         propertyType: r.property_type,
         price: Number(r.price),
         location: r.location,
+        district: r.district,
+        land_area: r.land_area,
+        land_area_unit: r.land_area_unit,
+        area: r.area,
         status: r.status,
         bedrooms: r.bedrooms,
+        contact_phone: r.contact_phone,
         created_at: r.created_at,
       })));
     } finally {
@@ -324,7 +434,8 @@ export default function CrmProperties() {
   const filtered = properties.filter(p =>
     !search ||
     (p.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.location ?? '').toLowerCase().includes(search.toLowerCase())
+    (p.location ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.district ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -396,7 +507,7 @@ export default function CrmProperties() {
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900 max-w-48 truncate">{p.title ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-600 capitalize">{p.propertyType ?? (p as any).property_type ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 max-w-36 truncate">{p.location ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 max-w-36 truncate">{p.location ? `${p.location}${p.district ? `, ${p.district}` : ''}` : (p.district ?? '—')}</td>
                       <td className="px-4 py-3 text-gray-900 font-medium">{formatINR(p.price)}</td>
                       <td className="px-4 py-3 text-gray-600">{p.bedrooms ?? '—'}</td>
                       <td className="px-4 py-3">

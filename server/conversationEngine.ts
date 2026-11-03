@@ -47,6 +47,7 @@ export const DISTRICT_ALIASES: Record<string, string> = {
   cochin: 'Ernakulam',
   kochi: 'Ernakulam',
   ernakulam: 'Ernakulam',
+  eranakulam: 'Ernakulam',
   thrissur: 'Thrissur',
   trichur: 'Thrissur',
   palakkad: 'Palakkad',
@@ -150,6 +151,8 @@ interface ConvData {
   district?: string;
   location?: string;
   detail?: string;
+  land_area?: string | number;
+  land_area_unit?: string;
   budget?: string;
   asking_price?: number;
   image_count?: number;
@@ -438,6 +441,28 @@ async function sendWelcomeMenu(to: string, convId: string, customerId: string): 
 
 // ─── District region & list senders ───────────────────────────────────────────
 
+/**
+ * Step 1: Quick-pick — Kottayam | Ernakulam | Other
+ * "Other" leads to the region picker (North / Central / South).
+ */
+async function askDistrictQuick(
+  to: string, convId: string, customerId: string,
+  prefix: 'b' | 'r' | 's', question: string,
+): Promise<void> {
+  await sendBtns(
+    to, convId, customerId,
+    `${question}\n\nSelect your district:`,
+    [
+      { id: `${prefix}:district:Kottayam`,  title: '🏡 Kottayam' },
+      { id: `${prefix}:district:Ernakulam`, title: '🏙️ Ernakulam' },
+      { id: `${prefix}:reg:other`,          title: '🗺️ Other' },
+    ],
+  );
+}
+
+/**
+ * Step 2 (only if "Other" chosen): Region picker — North | Central | South
+ */
 async function askDistrictRegion(
   to: string, convId: string, customerId: string,
   prefix: 'b' | 'r' | 's', question: string,
@@ -446,9 +471,9 @@ async function askDistrictRegion(
     to, convId, customerId,
     `${question}\n\nSelect a region below, or reply with your district name 📍`,
     [
-      { id: `${prefix}:reg:south`,   title: '🌴 South Kerala' },
-      { id: `${prefix}:reg:central`, title: '🏙️ Central Kerala' },
       { id: `${prefix}:reg:north`,   title: '🌄 North Kerala' },
+      { id: `${prefix}:reg:central`, title: '🏙️ Central Kerala' },
+      { id: `${prefix}:reg:south`,   title: '🌴 South Kerala' },
     ],
   );
 }
@@ -563,6 +588,26 @@ async function askSellerDetail(to: string, convId: string, customerId: string, p
   }
 }
 
+async function askBuyerLandArea(to: string, convId: string, customerId: string): Promise<void> {
+  await sendBtns(to, convId, customerId, 'What is your preferred land area / plot size?', [
+    { id: 'b:land:10cent', title: 'Up to 10 Cent' },
+    { id: 'b:land:25cent', title: '10 - 25 Cent' },
+    { id: 'b:land:big',    title: 'More than 25 Cent' },
+  ]);
+}
+
+async function askSellerLandArea(to: string, convId: string, customerId: string): Promise<void> {
+  await sendBtns(
+    to, convId, customerId,
+    'What is the land area of the property?\n\nSelect an option or reply with exact area (e.g. 7 Cent, 15 Cent, 1 Acre):',
+    [
+      { id: 's:land:10cent', title: 'Up to 10 Cent' },
+      { id: 's:land:25cent', title: '10 - 25 Cent' },
+      { id: 's:land:big',    title: 'More than 25 Cent' },
+    ],
+  );
+}
+
 async function askBuyerBudget(to: string, convId: string, customerId: string): Promise<void> {
   const wamid = await sendInteractiveList(
     to, 'Select Budget Range', 'What is your budget?', 'Choose Budget',
@@ -595,6 +640,7 @@ async function saveBuyerLead(conv: ConvState, data: Partial<ConvData>): Promise<
     location: data.location,
     locations: data.location ? [data.location] : [],
     detail: data.detail,
+    land_area: data.land_area ?? (data.property_type === 'plot' ? data.detail : undefined),
     budget_label: budgetLabel(data.budget ?? ''),
     budget_max: budgetToNumber(data.budget ?? '') || null,
   };
@@ -619,6 +665,7 @@ async function saveBuyerLead(conv: ConvState, data: Partial<ConvData>): Promise<
     'New ' + (conv.intent === 'rent' ? 'Rental' : 'Buyer') + ' Lead',
     `Type: ${data.property_type} | District: ${data.district}\n` +
     `Location: ${data.location} | Detail: ${data.detail}\n` +
+    (data.land_area ? `Land Area: ${data.land_area}\n` : '') +
     `Budget: ${budgetLabel(data.budget ?? '')}\n` +
     `Review: ${process.env.WEBSITE_BASE_URL ?? 'https://snhomes.in'}/admin/crm/buyers`
   );
@@ -632,6 +679,8 @@ async function saveSellerLead(conv: ConvState, data: Partial<ConvData>): Promise
     district: data.district,
     location: data.location,
     detail: data.detail,
+    land_area: data.land_area ?? (data.property_type === 'plot' ? data.detail : null),
+    land_area_unit: data.land_area_unit || 'cent',
     asking_price: data.asking_price ?? null,
   };
 
@@ -671,6 +720,8 @@ async function finishSellerFlow(
       district: data.district,
       location: data.location,
       detail: data.detail,
+      land_area: data.land_area ?? (data.property_type === 'plot' ? data.detail : null),
+      land_area_unit: data.land_area_unit || 'cent',
       asking_price: data.asking_price ?? null,
     };
     if (data.detail) {
@@ -695,6 +746,7 @@ async function finishSellerFlow(
     'New Seller Submission',
     `Type: ${data.property_type} | District: ${data.district}\n` +
     `Location: ${data.location} | Detail: ${data.detail}\n` +
+    (data.land_area ? `Land Area: ${data.land_area} ${data.land_area_unit || ''}\n` : '') +
     `Asking: ${formatINR(data.asking_price ?? 0)} | Photos: ${data.image_count ?? 0}\n` +
     `Review: ${process.env.WEBSITE_BASE_URL ?? 'https://snhomes.in'}/admin/crm/sellers`
   );
@@ -703,7 +755,9 @@ async function finishSellerFlow(
     `🏘️ Type: ${data.property_type}\n` +
     `📍 District: ${data.district}\n` +
     `🗺️ Location: ${data.location}\n` +
-    `📐 Detail: ${data.detail}\n` +
+    (data.property_type === 'house' ? `🛏️ Bedrooms: ${data.detail}\n` : '') +
+    (data.property_type === 'commercial' ? `🏢 Rooms: ${data.detail}\n` : '') +
+    (data.land_area ? `📐 Land Area: ${data.land_area} ${data.land_area_unit || ''}\n` : (data.property_type === 'plot' ? `📐 Land Area: ${data.detail}\n` : '')) +
     `💰 Asking Price: ${formatINR(data.asking_price ?? 0)}\n` +
     `📸 Photos: ${data.image_count ?? 0} uploaded\n\n` +
     `Our team will review and get back to you within 24 hours. Thank you! 🙏`;
@@ -819,24 +873,30 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     }
 
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), property_type: ptype }, workflow_status: 'b_district' });
-    await askDistrictRegion(from, conv.id, customerId, 'b', 'Which region in Kerala are you looking in? 📍');
+    await askDistrictQuick(from, conv.id, customerId, 'b', 'Which district in Kerala are you looking in? 📍');
     return;
   }
 
   if (status === 'b_district') {
-    // 1. Region selection
+    // 1. "Other" quick-pick → show region picker
+    if (bodyTrimmed === 'b:reg:other' || /other/i.test(bodyTrimmed) || /മറ്റുള്ളവ/.test(bodyTrimmed)) {
+      await askDistrictRegion(from, conv.id, customerId, 'b', 'Which region in Kerala are you looking in? 📍');
+      return;
+    }
+
+    // 2. Region selection (from region picker: North, Central, South)
     let regKey: 'south' | 'central' | 'north' | null = null;
     if (bodyTrimmed.startsWith('b:reg:')) regKey = bodyTrimmed.replace('b:reg:', '') as any;
-    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
-    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
     else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
 
     if (regKey && KERALA_REGIONS[regKey]) {
       await sendDistrictListForRegion(from, conv.id, customerId, 'b', regKey);
       return;
     }
 
-    // 2. District selection or direct text entry
+    // 3. District selection (quick-pick button or list or direct text entry)
     let district: string | null = null;
     if (bodyTrimmed.startsWith('b:district:')) {
       district = bodyTrimmed.replace('b:district:', '');
@@ -851,7 +911,7 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       return;
     }
 
-    await askDistrictRegion(from, conv.id, customerId, 'b', '⚠️ Please select a region below or type your district name:');
+    await askDistrictQuick(from, conv.id, customerId, 'b', '⚠️ Please select your district:');
     return;
   }
 
@@ -871,7 +931,43 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     if (!detail) {
       await askBuyerDetail(from, conv.id, customerId, ptype, 'b'); return;
     }
-    await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), detail }, workflow_status: 'b_budget' });
+
+    if (ptype === 'plot') {
+      // For plot/land, detail is the land area
+      await saveConversation(conv.id, {
+        buyer_data: { ...(conv.buyer_data ?? {}), detail, land_area: detail },
+        workflow_status: 'b_budget'
+      });
+      await askBuyerBudget(from, conv.id, customerId);
+      return;
+    }
+
+    // For house and commercial: ask land area next
+    await saveConversation(conv.id, {
+      buyer_data: { ...(conv.buyer_data ?? {}), detail },
+      workflow_status: 'b_land_area'
+    });
+    await askBuyerLandArea(from, conv.id, customerId);
+    return;
+  }
+
+  if (status === 'b_land_area') {
+    let landArea = '';
+    if (bodyTrimmed === 'b:land:10cent') landArea = 'Up to 10 Cent';
+    else if (bodyTrimmed === 'b:land:25cent') landArea = '10 - 25 Cent';
+    else if (bodyTrimmed === 'b:land:big') landArea = 'More than 25 Cent';
+    else if (bodyTrimmed) {
+      landArea = bodyTrimmed;
+    }
+
+    if (!landArea) {
+      await askBuyerLandArea(from, conv.id, customerId); return;
+    }
+
+    await saveConversation(conv.id, {
+      buyer_data: { ...(conv.buyer_data ?? {}), land_area: landArea },
+      workflow_status: 'b_budget'
+    });
     await askBuyerBudget(from, conv.id, customerId);
     return;
   }
@@ -889,7 +985,9 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       `🏘️ Type: ${data.property_type}\n` +
       `📍 District: ${data.district}\n` +
       `🗺️ Location: ${data.location}\n` +
-      `🛏️ Preference: ${data.detail}\n` +
+      (data.property_type === 'house' ? `🛏️ Preference: ${data.detail} BHK\n` : '') +
+      (data.property_type === 'commercial' ? `🏢 Preference: ${data.detail} Rooms\n` : '') +
+      (data.land_area ? `📐 Land Area: ${data.land_area}\n` : (data.property_type === 'plot' ? `📐 Preference: ${data.detail}\n` : '')) +
       `💰 Budget: ${budgetLabel(budget)}\n\n` +
       `Thank you! Our team will contact you once a matching property is found. 🙏`);
     return;
@@ -909,24 +1007,30 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       await askRentType(from, conv.id, customerId); return;
     }
     await saveConversation(conv.id, { buyer_data: { ...(conv.buyer_data ?? {}), property_type: ptype }, workflow_status: 'r_district' });
-    await askDistrictRegion(from, conv.id, customerId, 'r', 'Which region in Kerala are you looking to rent in? 📍');
+    await askDistrictQuick(from, conv.id, customerId, 'r', 'Which district in Kerala are you looking to rent in? 📍');
     return;
   }
 
   if (status === 'r_district') {
-    // 1. Region selection
+    // 1. "Other" quick-pick → show region picker
+    if (bodyTrimmed === 'r:reg:other' || /other/i.test(bodyTrimmed) || /മറ്റുള്ളവ/.test(bodyTrimmed)) {
+      await askDistrictRegion(from, conv.id, customerId, 'r', 'Which region in Kerala are you looking to rent in? 📍');
+      return;
+    }
+
+    // 2. Region selection (from region picker: North, Central, South)
     let regKey: 'south' | 'central' | 'north' | null = null;
     if (bodyTrimmed.startsWith('r:reg:')) regKey = bodyTrimmed.replace('r:reg:', '') as any;
-    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
-    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
     else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
 
     if (regKey && KERALA_REGIONS[regKey]) {
       await sendDistrictListForRegion(from, conv.id, customerId, 'r', regKey);
       return;
     }
 
-    // 2. District selection or direct text entry
+    // 3. District selection (quick-pick button or list or direct text entry)
     let district: string | null = null;
     if (bodyTrimmed.startsWith('r:district:')) {
       district = bodyTrimmed.replace('r:district:', '');
@@ -941,7 +1045,7 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       return;
     }
 
-    await askDistrictRegion(from, conv.id, customerId, 'r', '⚠️ Please select a region below or type your district name:');
+    await askDistrictQuick(from, conv.id, customerId, 'r', '⚠️ Please select your district:');
     return;
   }
 
@@ -1000,24 +1104,30 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       await askSellerType(from, conv.id, customerId); return;
     }
     await saveConversation(conv.id, { seller_data: { property_type: ptype }, workflow_status: 's_district' });
-    await askDistrictRegion(from, conv.id, customerId, 's', 'Which region is the property located in? 📍');
+    await askDistrictQuick(from, conv.id, customerId, 's', 'Which district is the property located in? 📍');
     return;
   }
 
   if (status === 's_district') {
-    // 1. Region selection
+    // 1. "Other" quick-pick → show region picker
+    if (bodyTrimmed === 's:reg:other' || /other/i.test(bodyTrimmed) || /മറ്റുള്ളവ/.test(bodyTrimmed)) {
+      await askDistrictRegion(from, conv.id, customerId, 's', 'Which region is the property located in? 📍');
+      return;
+    }
+
+    // 2. Region selection (from region picker: North, Central, South)
     let regKey: 'south' | 'central' | 'north' | null = null;
     if (bodyTrimmed.startsWith('s:reg:')) regKey = bodyTrimmed.replace('s:reg:', '') as any;
-    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
-    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
     else if (/north|വടക്ക്/i.test(bodyTrimmed)) regKey = 'north';
+    else if (/central|മധ്യം/i.test(bodyTrimmed)) regKey = 'central';
+    else if (/south|തെക്ക്/i.test(bodyTrimmed)) regKey = 'south';
 
     if (regKey && KERALA_REGIONS[regKey]) {
       await sendDistrictListForRegion(from, conv.id, customerId, 's', regKey);
       return;
     }
 
-    // 2. District selection or direct text entry
+    // 3. District selection (quick-pick button or list or direct text entry)
     let district: string | null = null;
     if (bodyTrimmed.startsWith('s:district:')) {
       district = bodyTrimmed.replace('s:district:', '');
@@ -1032,7 +1142,7 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
       return;
     }
 
-    await askDistrictRegion(from, conv.id, customerId, 's', '⚠️ Please select a region below or type your district name:');
+    await askDistrictQuick(from, conv.id, customerId, 's', '⚠️ Please select your district:');
     return;
   }
 
@@ -1055,18 +1165,67 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
         await askSellerDetail(from, conv.id, customerId, ptype); return;
       }
       detail = bodyTrimmed.replace('s:detail:', '');
-    } else {
-      const num = parseInt(bodyTrimmed, 10);
-      if (isNaN(num) || num <= 0) {
-        const hint = ptype === 'house'
-          ? '⚠️ Please reply with the number of bedrooms (e.g. 2, 3, 4).'
-          : '⚠️ Please reply with the number of rooms (e.g. 3, 5, 10).';
-        await sendMsg(from, conv.id, customerId, hint); return;
-      }
-      detail = String(num);
+      await saveConversation(conv.id, {
+        seller_data: { ...(conv.seller_data ?? {}), detail, land_area: detail, land_area_unit: 'cent' },
+        workflow_status: 's_price'
+      });
+      await sendMsg(from, conv.id, customerId,
+        'What is your asking price?\n\n_(Reply with the amount in numbers, e.g. 2500000 for ₹25 Lakh)_');
+      return;
     }
 
-    await saveConversation(conv.id, { seller_data: { ...(conv.seller_data ?? {}), detail }, workflow_status: 's_price' });
+    const num = parseInt(bodyTrimmed, 10);
+    if (isNaN(num) || num <= 0) {
+      const hint = ptype === 'house'
+        ? '⚠️ Please reply with the number of bedrooms (e.g. 2, 3, 4).'
+        : '⚠️ Please reply with the number of rooms (e.g. 3, 5, 10).';
+      await sendMsg(from, conv.id, customerId, hint); return;
+    }
+    detail = String(num);
+
+    // For house and commercial: ask for land area
+    await saveConversation(conv.id, {
+      seller_data: { ...(conv.seller_data ?? {}), detail },
+      workflow_status: 's_land_area'
+    });
+    await askSellerLandArea(from, conv.id, customerId);
+    return;
+  }
+
+  if (status === 's_land_area') {
+    let landArea: string | number = '';
+    let landUnit = 'cent';
+
+    if (bodyTrimmed === 's:land:10cent') {
+      landArea = 'Up to 10 Cent';
+      landUnit = 'cent';
+    } else if (bodyTrimmed === 's:land:25cent') {
+      landArea = '10 - 25 Cent';
+      landUnit = 'cent';
+    } else if (bodyTrimmed === 's:land:big') {
+      landArea = 'More than 25 Cent';
+      landUnit = 'cent';
+    } else if (bodyTrimmed) {
+      landArea = bodyTrimmed;
+      if (/acre/i.test(bodyTrimmed)) landUnit = 'acre';
+      else landUnit = 'cent';
+    }
+
+    if (!landArea) {
+      await askSellerLandArea(from, conv.id, customerId); return;
+    }
+
+    const numMatch = typeof landArea === 'string' ? landArea.match(/(\d+(?:\.\d+)?)/) : null;
+    const numericArea = numMatch ? parseFloat(numMatch[1]) : (typeof landArea === 'number' ? landArea : null);
+
+    await saveConversation(conv.id, {
+      seller_data: {
+        ...(conv.seller_data ?? {}),
+        land_area: numericArea ?? landArea,
+        land_area_unit: landUnit,
+      },
+      workflow_status: 's_price'
+    });
     await sendMsg(from, conv.id, customerId,
       'What is your asking price?\n\n_(Reply with the amount in numbers, e.g. 2500000 for ₹25 Lakh)_');
     return;

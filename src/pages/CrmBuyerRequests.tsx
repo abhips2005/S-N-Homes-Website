@@ -204,6 +204,7 @@ export default function CrmBuyerRequests() {
                   ['Bedrooms / Preference', selected.requirements.bedrooms_min
                     ? `${selected.requirements.bedrooms_min}+ Bedrooms`
                     : selected.requirements.detail],
+                  ['Land Area', selected.requirements.land_area ? String(selected.requirements.land_area) : undefined],
                   ['Budget', selected.requirements.budget_label || (selected.requirements.budget_min && selected.requirements.budget_max
                     ? `${formatINR(selected.requirements.budget_min)} – ${formatINR(selected.requirements.budget_max)}`
                     : (selected.requirements.budget_max ? formatINR(selected.requirements.budget_max) : undefined))],

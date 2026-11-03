@@ -234,6 +234,9 @@ describe('District resolver', () => {
   it('resolves common city/district aliases', () => {
     expect(resolveDistrict('kochi')).toBe('Ernakulam');
     expect(resolveDistrict('cochin')).toBe('Ernakulam');
+    expect(resolveDistrict('eranakulam')).toBe('Ernakulam');
+    expect(resolveDistrict('Eranakulam')).toBe('Ernakulam');
+    expect(resolveDistrict('kottayam')).toBe('Kottayam');
     expect(resolveDistrict('trivandrum')).toBe('Thiruvananthapuram');
     expect(resolveDistrict('tvm')).toBe('Thiruvananthapuram');
     expect(resolveDistrict('calicut')).toBe('Kozhikode');
