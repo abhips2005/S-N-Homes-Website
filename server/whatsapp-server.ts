@@ -24,6 +24,7 @@ import apiRouter from './apiRoutes';
 getSupabase();
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT) || 3001;
 
 // ─── Security middleware ──────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log('[Server] S&N Homes WhatsApp CRM running on port ' + PORT);
+  console.log('[Server] S N Homes WhatsApp CRM running on port ' + PORT);
   console.log('[Server] Webhook URL: POST /api/webhooks/whatsapp');
   console.log('[Server] Health: GET  /api/health');
   if (!process.env.WHATSAPP_ACCESS_TOKEN) {

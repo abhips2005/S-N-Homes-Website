@@ -60,7 +60,7 @@ export default function CrmOverview() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">WhatsApp CRM Overview</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Real-time snapshot of your S&N Homes CRM</p>
+            <p className="text-gray-500 text-sm mt-0.5">Real-time snapshot of your S N Homes CRM</p>
           </div>
           <button onClick={load} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
             <RefreshCw size={14} /> Refresh

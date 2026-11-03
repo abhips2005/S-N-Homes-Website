@@ -122,9 +122,11 @@ export function resolveDetail(body: string, ptype: string, prefix: 'b' | 'r'): s
     if (clean.includes('3')) return '3plus';
     if (clean.includes('4') || clean.includes('5')) return '4plus';
   } else if (ptype === 'plot') {
-    if (clean.includes('50') || clean.includes('cent')) return '50cent';
+    if (clean.includes('big') || clean.includes('more') || clean.includes('above')) return 'above50cent';
+    if (clean.includes('20')) return '20cent';
+    if (clean.includes('50')) return '50cent';
     if (clean.includes('1') || clean.includes('acre')) return '1acre';
-    if (clean.includes('big') || clean.includes('more')) return 'big';
+    if (clean.includes('cent')) return '20cent';
   } else {
     if (clean.includes('5')) return '5rooms';
     if (clean.includes('10')) return '10rooms';
@@ -373,7 +375,7 @@ async function notifyOwner(subject: string, body: string): Promise<void> {
       headers: { Authorization: `Bearer ${sgKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: ownerEmail }] }],
-        from: { email: 'noreply@snhomes.in', name: 'S&N Homes CRM' },
+        from: { email: 'noreply@snhomes.in', name: 'S N Homes CRM' },
         subject, content: [{ type: 'text/plain', value: body }],
       }),
     }).catch(() => null);
@@ -386,13 +388,13 @@ async function handleOptOut(customerId: string, convId: string, phone: string): 
   await db().from('crm_customers').update({ opted_out: true }).eq('id', customerId);
   await saveConversation(convId, { opted_out: true, automation_paused: true });
   await writeAudit('opt_out', 'crm_customers', customerId, phone);
-  return 'You have been unsubscribed from S&N Homes messages. Reply START to re-subscribe.';
+  return 'You have been unsubscribed from S N Homes messages. Reply START to re-subscribe.';
 }
 
 async function handleOptIn(customerId: string, convId: string): Promise<string> {
   await db().from('crm_customers').update({ opted_out: false }).eq('id', customerId);
   await saveConversation(convId, { opted_out: false, automation_paused: false });
-  return 'Welcome back! You are subscribed to S&N Homes updates. Say *Hi* to get the main menu.';
+  return 'Welcome back! You are subscribed to S N Homes updates. Say *Hi* to get the main menu.';
 }
 
 // ─── Format INR ───────────────────────────────────────────────────────────────
@@ -559,9 +561,9 @@ async function askBuyerDetail(
     ]);
   } else if (ptype === 'plot') {
     await sendBtns(to, convId, customerId, 'What plot area are you looking for?', [
-      { id: `${prefix}:detail:50cent`, title: 'Up to 50 Cent'     },
-      { id: `${prefix}:detail:1acre`,  title: 'Up to 1 Acre'      },
-      { id: `${prefix}:detail:big`,    title: 'More than 1 Acre'  },
+      { id: `${prefix}:detail:20cent`,      title: 'Upto 20 cent' },
+      { id: `${prefix}:detail:50cent`,      title: 'Upto 50 cent' },
+      { id: `${prefix}:detail:above50cent`, title: 'More than 50 cent' },
     ]);
   } else {
     await sendBtns(to, convId, customerId, 'How many rooms do you need?', [
@@ -575,9 +577,9 @@ async function askBuyerDetail(
 async function askSellerDetail(to: string, convId: string, customerId: string, ptype: string): Promise<void> {
   if (ptype === 'plot') {
     await sendBtns(to, convId, customerId, 'What is the plot area?', [
-      { id: 's:detail:50cent', title: 'Up to 50 Cent'    },
-      { id: 's:detail:1acre',  title: 'Up to 1 Acre'     },
-      { id: 's:detail:big',    title: 'More than 1 Acre' },
+      { id: 's:detail:20cent',      title: 'Upto 20 cent' },
+      { id: 's:detail:50cent',      title: 'Upto 50 cent' },
+      { id: 's:detail:above50cent', title: 'More than 50 cent' },
     ]);
   } else if (ptype === 'house') {
     await sendMsg(to, convId, customerId,
@@ -590,9 +592,9 @@ async function askSellerDetail(to: string, convId: string, customerId: string, p
 
 async function askBuyerLandArea(to: string, convId: string, customerId: string): Promise<void> {
   await sendBtns(to, convId, customerId, 'What is your preferred land area / plot size?', [
-    { id: 'b:land:10cent', title: 'Up to 10 Cent' },
-    { id: 'b:land:25cent', title: '10 - 25 Cent' },
-    { id: 'b:land:big',    title: 'More than 25 Cent' },
+    { id: 'b:land:20cent',      title: 'Upto 20 cent' },
+    { id: 'b:land:50cent',      title: 'Upto 50 cent' },
+    { id: 'b:land:above50cent', title: 'More than 50 cent' },
   ]);
 }
 
@@ -601,9 +603,9 @@ async function askSellerLandArea(to: string, convId: string, customerId: string)
     to, convId, customerId,
     'What is the land area of the property?\n\nSelect an option or reply with exact area (e.g. 7 Cent, 15 Cent, 1 Acre):',
     [
-      { id: 's:land:10cent', title: 'Up to 10 Cent' },
-      { id: 's:land:25cent', title: '10 - 25 Cent' },
-      { id: 's:land:big',    title: 'More than 25 Cent' },
+      { id: 's:land:20cent',      title: 'Upto 20 cent' },
+      { id: 's:land:50cent',      title: 'Upto 50 cent' },
+      { id: 's:land:above50cent', title: 'More than 50 cent' },
     ],
   );
 }
@@ -772,15 +774,31 @@ interface PhotoBatch {
   convId: string;
   customerId: string;
   submissionId: string;
+  expectedCount: number;
 }
 
 const photoBatchTimers = new Map<string, PhotoBatch>();
+
+export async function hasPendingJobsForSender(from: string): Promise<boolean> {
+  try {
+    const { data, error } = await db()
+      .from('crm_job_queue')
+      .select('payload')
+      .eq('status', 'pending')
+      .limit(30);
+    if (error || !data) return false;
+    return data.some(j => (j.payload as { msg?: { from?: string } })?.msg?.from === from);
+  } catch {
+    return false;
+  }
+}
 
 function schedulePhotoBatchNotification(
   from: string,
   conv: ConvState,
   customerId: string,
   submissionId: string,
+  expectedCount: number,
 ): void {
   const existing = photoBatchTimers.get(conv.id);
   if (existing) {
@@ -790,6 +808,19 @@ function schedulePhotoBatchNotification(
   const timer = setTimeout(async () => {
     photoBatchTimers.delete(conv.id);
     try {
+      // If more messages are already in queue for this sender, cancel notification
+      if (await hasPendingJobsForSender(from)) {
+        console.log(`[Photo Batch] More messages pending for ${from}, skipping scheduled notification.`);
+        return;
+      }
+
+      // Check current conversation state - ensure it's still waiting for photos
+      const currentConv = await getOrCreateConversation(customerId);
+      if (currentConv.workflow_status !== 's_photos') {
+        console.log(`[Photo Batch] Conversation ${conv.id} is no longer in s_photos (${currentConv.workflow_status}), skipping.`);
+        return;
+      }
+
       const { data: sub } = await db()
         .from('crm_seller_submissions')
         .select('image_paths')
@@ -798,7 +829,11 @@ function schedulePhotoBatchNotification(
       const currentPaths = ((sub?.image_paths as string[]) ?? []);
       const count = currentPaths.length;
 
-      const currentConv = await getOrCreateConversation(customerId);
+      // If more photos have been added since scheduling, a later schedule/finish will handle it
+      if (count > expectedCount) {
+        return;
+      }
+
       const data = currentConv.seller_data ?? {};
 
       if (count >= 5) {
@@ -821,9 +856,9 @@ function schedulePhotoBatchNotification(
     } catch (err) {
       console.error('[Photo batch notification error]', err);
     }
-  }, 2500);
+  }, 3000);
 
-  photoBatchTimers.set(conv.id, { timer, from, convId: conv.id, customerId, submissionId });
+  photoBatchTimers.set(conv.id, { timer, from, convId: conv.id, customerId, submissionId, expectedCount });
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -996,8 +1031,12 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
 
     if (ptype === 'plot') {
       // For plot/land, detail is the land area
+      const displayArea = (detail === '20cent' || detail === '10cent') ? 'Upto 20 cent'
+        : (detail === '50cent' || detail === '25cent') ? 'Upto 50 cent'
+        : (detail === 'above50cent' || detail === 'big') ? 'More than 50 cent'
+        : detail;
       await saveConversation(conv.id, {
-        buyer_data: { ...(conv.buyer_data ?? {}), detail, land_area: detail },
+        buyer_data: { ...(conv.buyer_data ?? {}), detail: displayArea, land_area: displayArea },
         workflow_status: 'b_budget'
       });
       await askBuyerBudget(from, conv.id, customerId);
@@ -1015,10 +1054,13 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
 
   if (status === 'b_land_area') {
     let landArea = '';
-    if (bodyTrimmed === 'b:land:10cent') landArea = 'Up to 10 Cent';
-    else if (bodyTrimmed === 'b:land:25cent') landArea = '10 - 25 Cent';
-    else if (bodyTrimmed === 'b:land:big') landArea = 'More than 25 Cent';
-    else if (bodyTrimmed) {
+    if (bodyTrimmed === 'b:land:20cent' || bodyTrimmed === 'b:land:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
+      landArea = 'Upto 20 cent';
+    } else if (bodyTrimmed === 'b:land:50cent' || bodyTrimmed === 'b:land:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+      landArea = 'Upto 50 cent';
+    } else if (bodyTrimmed === 'b:land:above50cent' || bodyTrimmed === 'b:land:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {
+      landArea = 'More than 50 cent';
+    } else if (bodyTrimmed) {
       landArea = bodyTrimmed;
     }
 
@@ -1223,12 +1265,43 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     let detail: string;
 
     if (ptype === 'plot') {
-      if (!bodyTrimmed.startsWith('s:detail:')) {
+      let areaLabel = '';
+      let numericVal: number | null = null;
+      let unit = 'cent';
+
+      if (bodyTrimmed === 's:detail:20cent' || bodyTrimmed === 's:detail:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
+        areaLabel = 'Upto 20 cent';
+        numericVal = 20;
+      } else if (bodyTrimmed === 's:detail:50cent' || bodyTrimmed === 's:detail:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+        areaLabel = 'Upto 50 cent';
+        numericVal = 50;
+      } else if (bodyTrimmed === 's:detail:above50cent' || bodyTrimmed === 's:detail:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {
+        areaLabel = 'More than 50 cent';
+        numericVal = 50;
+      } else if (bodyTrimmed.startsWith('s:detail:')) {
+        areaLabel = bodyTrimmed.replace('s:detail:', '');
+      } else if (bodyTrimmed) {
+        areaLabel = bodyTrimmed;
+        if (/acre/i.test(bodyTrimmed)) unit = 'acre';
+      }
+
+      if (!areaLabel) {
         await askSellerDetail(from, conv.id, customerId, ptype); return;
       }
-      detail = bodyTrimmed.replace('s:detail:', '');
+
+      if (numericVal === null) {
+        const match = areaLabel.match(/(\d+(?:\.\d+)?)/);
+        numericVal = match ? parseFloat(match[1]) : null;
+      }
+
+      detail = areaLabel;
       await saveConversation(conv.id, {
-        seller_data: { ...(conv.seller_data ?? {}), detail, land_area: detail, land_area_unit: 'cent' },
+        seller_data: {
+          ...(conv.seller_data ?? {}),
+          detail,
+          land_area: numericVal ?? detail,
+          land_area_unit: unit,
+        },
         workflow_status: 's_price'
       });
       await sendMsg(from, conv.id, customerId,
@@ -1258,14 +1331,14 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     let landArea: string | number = '';
     let landUnit = 'cent';
 
-    if (bodyTrimmed === 's:land:10cent') {
-      landArea = 'Up to 10 Cent';
+    if (bodyTrimmed === 's:land:20cent' || bodyTrimmed === 's:land:10cent' || /^upto\s*20/i.test(bodyTrimmed)) {
+      landArea = 'Upto 20 cent';
       landUnit = 'cent';
-    } else if (bodyTrimmed === 's:land:25cent') {
-      landArea = '10 - 25 Cent';
+    } else if (bodyTrimmed === 's:land:50cent' || bodyTrimmed === 's:land:25cent' || /^upto\s*50/i.test(bodyTrimmed)) {
+      landArea = 'Upto 50 cent';
       landUnit = 'cent';
-    } else if (bodyTrimmed === 's:land:big') {
-      landArea = 'More than 25 Cent';
+    } else if (bodyTrimmed === 's:land:above50cent' || bodyTrimmed === 's:land:big' || /more\s*than\s*50/i.test(bodyTrimmed) || /above\s*50/i.test(bodyTrimmed)) {
+      landArea = 'More than 50 cent';
       landUnit = 'cent';
     } else if (bodyTrimmed) {
       landArea = bodyTrimmed;
@@ -1336,7 +1409,12 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
           }
           await finishSellerFlow(from, { ...conv, seller_data: { ...data, image_count: newCount } }, customerId, { ...data, image_count: newCount });
         } else {
-          schedulePhotoBatchNotification(from, conv, customerId, conv.pending_submission_id);
+          const hasMore = await hasPendingJobsForSender(from);
+          if (hasMore) {
+            console.log(`[Photo Batch] More messages pending in queue for ${from}, skipping intermediate notification.`);
+          } else {
+            schedulePhotoBatchNotification(from, conv, customerId, conv.pending_submission_id, newCount);
+          }
         }
       } catch (err) {
         console.error('[Media upload error]', err);

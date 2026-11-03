@@ -344,7 +344,7 @@ router.post('/seller-submissions/:id/approve', strictLimiter, async (req: Reques
     if (phone) {
       await sendWhatsAppMessage(
         phone,
-        'Great news! Your property submission has been approved by S&N Homes. ' +
+        'Great news! Your property submission has been approved by S N Homes. ' +
         'We will list it on our website shortly and contact you with next steps.'
       );
     }
@@ -452,7 +452,7 @@ router.post('/seller-submissions/:id/publish', strictLimiter, async (req: Reques
         status: 'available',
         price: d.asking_price || 0,
         location: d.location || '',
-        district: d.location || '',
+        district: (d.district as string) || (d.location as string) || '',
         bedrooms: d.bedrooms || null,
         bathrooms: d.bathrooms || null,
         land_area: d.land_area || null,
@@ -462,7 +462,6 @@ router.post('/seller-submissions/:id/publish', strictLimiter, async (req: Reques
         images: signedUrls,
         source: 'whatsapp_crm',
         seller_submission_id: id,
-        customer_id: sub.customer_id,
         created_at: now,
         updated_at: now,
       })
@@ -483,7 +482,7 @@ router.post('/seller-submissions/:id/publish', strictLimiter, async (req: Reques
     if (phone) {
       await sendWhatsAppMessage(
         phone,
-        `Your property is now live on S&N Homes! View it here: ${baseUrl}/property/${propDoc.id}\n` +
+        `Your property is now live on  S N Homes!\n` +
         'We will notify you when interested buyers contact us.'
       );
     }

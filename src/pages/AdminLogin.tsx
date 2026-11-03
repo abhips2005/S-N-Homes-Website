@@ -120,7 +120,7 @@ const AdminLogin: React.FC = () => {
                 <Shield size={24} />
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-1">Admin Portal</h1>
-              <p className="text-gray-500 text-sm">Sign in to manage S&N Homes CRM & properties</p>
+              <p className="text-gray-500 text-sm">Sign in to manage S N Homes CRM & properties</p>
             </div>
 
             {/* Quick action if already logged in as recognized admin */}
