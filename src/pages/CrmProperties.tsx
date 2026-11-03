@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Plus, Search, Eye, Pencil, CheckCircle, Archive, XCircle, ChevronLeft } from 'lucide-react';
+import { Building2, Plus, Search, Eye, Pencil, CheckCircle, Archive, XCircle, ChevronLeft, Image as ImageIcon, X as XIcon } from 'lucide-react';
 import { BACKEND_URL } from '../services/crmService';
 import { supabase } from '../supabase-config';
 import CrmBottomNav from '../components/CrmBottomNav';
@@ -54,39 +54,89 @@ function PropertyModal({ initial, onClose, onSaved }: {
     location: initial?.location ?? '',
     status: initial?.status ?? 'draft',
     bedrooms: initial?.bedrooms ? String(initial.bedrooms) : '',
+    mobile: '',
   });
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setImageFiles(prev => [...prev, ...files]);
+    files.forEach(f => {
+      const reader = new FileReader();
+      reader.onload = ev => setImagePreviews(prev => [...prev, ev.target?.result as string]);
+      reader.readAsDataURL(f);
+    });
+    // reset input so same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removeImage(index: number) {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  }
+
+  async function uploadImagesToSupabase(propertyId: string): Promise<string[]> {
+    if (!imageFiles.length) return [];
+    const urls: string[] = [];
+    for (const file of imageFiles) {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `property-images/${propertyId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('property-images').upload(path, file, { upsert: false });
+      if (upErr) { console.warn('Image upload failed:', upErr); continue; }
+      const { data: urlData } = supabase.storage.from('property-images').getPublicUrl(path);
+      if (urlData?.publicUrl) urls.push(urlData.publicUrl);
+    }
+    return urls;
+  }
 
   async function handleSave() {
     if (!form.title || !form.propertyType) { setError('Title and type are required'); return; }
     setSaving(true);
     setError('');
     try {
-      const payload = {
-        ...form,
+      const payload: Record<string, unknown> = {
+        title: form.title,
+        propertyType: form.propertyType,
+        property_type: form.propertyType,
         price: form.price ? Number(form.price) : null,
+        location: form.location,
+        status: form.status,
         bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
+        ...(form.mobile ? { contact_phone: form.mobile } : {}),
       };
-      const url = isNew ? API + '/properties' : API + '/properties/' + initial!.id;
-      const method = isNew ? 'POST' : 'PATCH';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!res.ok) throw new Error(await res.text());
-      onSaved();
-      onClose();
-    } catch (e) {
-      console.warn('[CRM] API save failed, falling back to Supabase:', e);
+
+      let propertyId: string = initial?.id ?? '';
+
+      // Try API first
       try {
+        const url = isNew ? API + '/properties' : API + '/properties/' + initial!.id;
+        const method = isNew ? 'POST' : 'PATCH';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error(await res.text());
         if (isNew) {
-          const { error: insErr } = await supabase.from('properties').insert({
+          const json = await res.json();
+          propertyId = json?.data?.id ?? json?.id ?? '';
+        }
+      } catch (apiErr) {
+        // Fallback to direct Supabase
+        console.warn('[CRM] API save failed, falling back to Supabase:', apiErr);
+        if (isNew) {
+          const { data: ins, error: insErr } = await supabase.from('properties').insert({
             title: form.title,
             property_type: form.propertyType,
             price: form.price ? Number(form.price) : null,
             location: form.location,
             status: form.status,
             bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
-          });
+            ...(form.mobile ? { contact_phone: form.mobile } : {}),
+          }).select('id').single();
           if (insErr) throw insErr;
+          propertyId = ins.id;
         } else {
           const { error: updErr } = await supabase.from('properties').update({
             title: form.title,
@@ -95,14 +145,24 @@ function PropertyModal({ initial, onClose, onSaved }: {
             location: form.location,
             status: form.status,
             bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
+            ...(form.mobile ? { contact_phone: form.mobile } : {}),
           }).eq('id', initial!.id);
           if (updErr) throw updErr;
         }
-        onSaved();
-        onClose();
-      } catch (dbErr) {
-        setError(String(dbErr));
       }
+
+      // Upload images if any
+      if (imageFiles.length && propertyId) {
+        const imageUrls = await uploadImagesToSupabase(propertyId);
+        if (imageUrls.length) {
+          await supabase.from('properties').update({ images: imageUrls }).eq('id', propertyId);
+        }
+      }
+
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(String(e));
     } finally {
       setSaving(false);
     }
@@ -118,6 +178,7 @@ function PropertyModal({ initial, onClose, onSaved }: {
           { label: 'Location', key: 'location' as const, type: 'text' },
           { label: 'Price (₹)', key: 'price' as const, type: 'number' },
           { label: 'Bedrooms', key: 'bedrooms' as const, type: 'number' },
+          { label: 'Mobile Number', key: 'mobile' as const, type: 'tel' },
         ].map(f => (
           <div key={f.key}>
             <label className="text-sm font-medium text-gray-700">{f.label}</label>
@@ -125,6 +186,7 @@ function PropertyModal({ initial, onClose, onSaved }: {
               type={f.type}
               value={form[f.key]}
               onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+              placeholder={f.key === 'mobile' ? 'e.g. +919876543210' : undefined}
               className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -149,6 +211,44 @@ function PropertyModal({ initial, onClose, onSaved }: {
             </select>
           </div>
         </div>
+
+        {/* Image Upload */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+            <ImageIcon size={14} /> Photos
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleImageChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-1 w-full border-2 border-dashed border-gray-200 rounded-lg px-3 py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors text-center"
+          >
+            + Add Photos
+          </button>
+          {imagePreviews.length > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {imagePreviews.map((src, i) => (
+                <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
+                  <img src={src} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => removeImage(i)}
+                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80"
+                  >
+                    <XIcon size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 border border-gray-200 rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 text-sm font-medium disabled:opacity-50">
@@ -176,7 +276,10 @@ export default function CrmProperties() {
       const res = await fetch(API + '/properties' + qs);
       if (!res.ok) throw new Error('API failed');
       const data = await res.json();
-      setProperties(Array.isArray(data.data) ? data.data : []);
+      setProperties((Array.isArray(data.data) ? data.data : []).map((r: any) => ({
+        ...r,
+        propertyType: r.propertyType ?? r.property_type,
+      })));
     } catch (err) {
       console.warn('[CRM] API load failed, falling back to Supabase:', err);
       let q = supabase
@@ -292,7 +395,7 @@ export default function CrmProperties() {
                   {filtered.map(p => (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900 max-w-48 truncate">{p.title ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 capitalize">{p.propertyType ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 capitalize">{p.propertyType ?? (p as any).property_type ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-600 max-w-36 truncate">{p.location ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-900 font-medium">{formatINR(p.price)}</td>
                       <td className="px-4 py-3 text-gray-600">{p.bedrooms ?? '—'}</td>
