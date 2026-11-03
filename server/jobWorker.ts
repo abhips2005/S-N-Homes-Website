@@ -124,8 +124,11 @@ async function tick(): Promise<void> {
   running = true;
   try {
     await releaseStuckLocks();
-    const job = await pickJob();
-    if (job) await processJob(job);
+    let job = await pickJob();
+    while (job) {
+      await processJob(job);
+      job = await pickJob();
+    }
   } catch (err) {
     console.error('[Worker] Tick error:', err);
   } finally {
@@ -159,5 +162,6 @@ export async function enqueueMessage(msg: InboundMessage): Promise<string> {
     .single();
 
   if (error) throw new Error('[Worker] Failed to enqueue job: ' + error.message);
+  setImmediate(tick);
   return data.id as string;
 }

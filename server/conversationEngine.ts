@@ -764,6 +764,68 @@ async function finishSellerFlow(
   await sendMsg(to, conv.id, customerId, summary);
 }
 
+// ─── Photo batch debouncer ───────────────────────────────────────────────────
+
+interface PhotoBatch {
+  timer: NodeJS.Timeout;
+  from: string;
+  convId: string;
+  customerId: string;
+  submissionId: string;
+}
+
+const photoBatchTimers = new Map<string, PhotoBatch>();
+
+function schedulePhotoBatchNotification(
+  from: string,
+  conv: ConvState,
+  customerId: string,
+  submissionId: string,
+): void {
+  const existing = photoBatchTimers.get(conv.id);
+  if (existing) {
+    clearTimeout(existing.timer);
+  }
+
+  const timer = setTimeout(async () => {
+    photoBatchTimers.delete(conv.id);
+    try {
+      const { data: sub } = await db()
+        .from('crm_seller_submissions')
+        .select('image_paths')
+        .eq('id', submissionId)
+        .single();
+      const currentPaths = ((sub?.image_paths as string[]) ?? []);
+      const count = currentPaths.length;
+
+      const currentConv = await getOrCreateConversation(customerId);
+      const data = currentConv.seller_data ?? {};
+
+      if (count >= 5) {
+        await finishSellerFlow(
+          from,
+          { ...currentConv, seller_data: { ...data, image_count: count } },
+          customerId,
+          { ...data, image_count: count },
+        );
+      } else {
+        const remaining = 5 - count;
+        const photoWord = count === 1 ? 'photo' : 'photos';
+        await sendMsg(
+          from,
+          conv.id,
+          customerId,
+          `📸 ${count} ${photoWord} received! You can send ${remaining} more, or type *done* to finish.`,
+        );
+      }
+    } catch (err) {
+      console.error('[Photo batch notification error]', err);
+    }
+  }, 2500);
+
+  photoBatchTimers.set(conv.id, { timer, from, convId: conv.id, customerId, submissionId });
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export interface InboundMessage {
@@ -1265,11 +1327,16 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
           .eq('id', conv.pending_submission_id);
         const newCount = newPaths.length;
         await saveConversation(conv.id, { seller_data: { ...data, image_count: newCount } });
-        if (newCount < 5) {
-          await sendMsg(from, conv.id, customerId,
-            `📸 Photo ${newCount} received! You can send ${5 - newCount} more, or type *done* to finish.`);
-        } else {
+
+        if (newCount >= 5) {
+          const existing = photoBatchTimers.get(conv.id);
+          if (existing) {
+            clearTimeout(existing.timer);
+            photoBatchTimers.delete(conv.id);
+          }
           await finishSellerFlow(from, { ...conv, seller_data: { ...data, image_count: newCount } }, customerId, { ...data, image_count: newCount });
+        } else {
+          schedulePhotoBatchNotification(from, conv, customerId, conv.pending_submission_id);
         }
       } catch (err) {
         console.error('[Media upload error]', err);
@@ -1279,7 +1346,22 @@ export async function processMessage(msg: InboundMessage): Promise<void> {
     }
 
     if (['done', 'no photos', 'skip'].includes(bodyLower) || imageCount >= 5) {
-      await finishSellerFlow(from, conv, customerId, data); return;
+      const existing = photoBatchTimers.get(conv.id);
+      if (existing) {
+        clearTimeout(existing.timer);
+        photoBatchTimers.delete(conv.id);
+      }
+      let currentCount = imageCount;
+      if (conv.pending_submission_id) {
+        const { data: sub } = await db()
+          .from('crm_seller_submissions')
+          .select('image_paths')
+          .eq('id', conv.pending_submission_id)
+          .single();
+        currentCount = ((sub?.image_paths as string[]) ?? []).length;
+      }
+      await finishSellerFlow(from, conv, customerId, { ...data, image_count: currentCount });
+      return;
     }
 
     await sendMsg(from, conv.id, customerId,
