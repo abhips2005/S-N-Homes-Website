@@ -1,5 +1,4 @@
-
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
@@ -34,7 +33,62 @@ import CrmFollowUps from './pages/CrmFollowUps';
 import CrmAuditLogs from './pages/CrmAuditLogs';
 import CrmProperties from './pages/CrmProperties';
 import CrmSettings from './pages/CrmSettings';
+import PalaAdPage from './pages/PalaAdPage';
 import ErrorBoundary from './components/ErrorBoundary';
+
+function AppLayout() {
+  const location = useLocation();
+  const isAds = location.pathname.startsWith('/ads');
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {!isAds && <Navbar />}
+      {!isAds && <PWAInstallPrompt />}
+      <main className="flex-grow">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/ads/pala" element={<PalaAdPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+
+          {/* Protected Routes */}
+          <Route element={<PrivateRoute />}>
+            <Route path="/properties" element={<Properties />} />
+            <Route path="/property/:id" element={<PropertyDetails />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/add-property" element={<AddProperty />} />
+            <Route path="/edit-property/:id" element={<EditProperty />} />
+            <Route path="/saved" element={<SavedProperties />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+
+          {/* Admin Routes */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/properties" element={<AdminProperties />} />
+            <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/notifications" element={<AdminNotifications />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
+            {/* CRM routes */}
+            <Route path="/admin/crm" element={<CrmOverview />} />
+            <Route path="/admin/crm/inbox" element={<CrmInbox />} />
+            <Route path="/admin/crm/buyers" element={<CrmBuyerRequests />} />
+            <Route path="/admin/crm/sellers" element={<CrmSellerSubmissions />} />
+            <Route path="/admin/crm/followups" element={<CrmFollowUps />} />
+            <Route path="/admin/crm/audit" element={<CrmAuditLogs />} />
+            <Route path="/admin/crm/properties" element={<CrmProperties />} />
+            <Route path="/admin/crm/settings" element={<CrmSettings />} />
+          </Route>
+        </Routes>
+      </main>
+      {!isAds && <Footer />}
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -42,51 +96,7 @@ function App() {
       <AuthProvider>
         <Toaster position="top-center" />
         <BrowserRouter>
-          <div className="min-h-screen bg-gray-50 flex flex-col">
-            <Navbar />
-            <PWAInstallPrompt />
-            <main className="flex-grow">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/admin-login" element={<AdminLogin />} />
-                
-                {/* Protected Routes */}
-                <Route element={<PrivateRoute />}>
-                  <Route path="/properties" element={<Properties />} />
-                  <Route path="/property/:id" element={<PropertyDetails />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/add-property" element={<AddProperty />} />
-                  <Route path="/edit-property/:id" element={<EditProperty />} />
-                  <Route path="/saved" element={<SavedProperties />} />
-                  <Route path="/history" element={<History />} />
-                  <Route path="/notifications" element={<Notifications />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Route>
-
-                {/* Admin Routes */}
-                <Route element={<AdminRoute />}>
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  <Route path="/admin/properties" element={<AdminProperties />} />
-                  <Route path="/admin/reports" element={<AdminReports />} />
-                  <Route path="/admin/users" element={<AdminUsers />} />
-                  <Route path="/admin/notifications" element={<AdminNotifications />} />
-                  <Route path="/admin/settings" element={<AdminSettings />} />
-                  {/* CRM routes */}
-                  <Route path="/admin/crm" element={<CrmOverview />} />
-                  <Route path="/admin/crm/inbox" element={<CrmInbox />} />
-                  <Route path="/admin/crm/buyers" element={<CrmBuyerRequests />} />
-                  <Route path="/admin/crm/sellers" element={<CrmSellerSubmissions />} />
-                  <Route path="/admin/crm/followups" element={<CrmFollowUps />} />
-                  <Route path="/admin/crm/audit" element={<CrmAuditLogs />} />
-                  <Route path="/admin/crm/properties" element={<CrmProperties />} />
-                  <Route path="/admin/crm/settings" element={<CrmSettings />} />
-                </Route>
-              </Routes>
-            </main>
-            <Footer />
-          </div>
+          <AppLayout />
         </BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>

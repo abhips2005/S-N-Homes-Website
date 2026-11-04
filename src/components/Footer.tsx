@@ -1,6 +1,5 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import { Facebook, Instagram, Youtube, Phone, Mail } from 'lucide-react';
+import { Phone, Mail } from 'lucide-react';
 
 function Footer() {
   return (
@@ -29,27 +28,12 @@ function Footer() {
             <div className="space-y-2 text-gray-400">
               <p className="flex items-center">
                 <Phone className="w-5 h-5 mr-2" />
-                +91 123 456 7890
+                +91 9605807960
               </p>
               <p className="flex items-center">
                 <Mail className="w-5 h-5 mr-2" />
-                info@snhomes.com
+                snhomeskerala@gmail.com
               </p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="text-lg font-semibold mb-4">Follow Us</h4>
-            <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white">
-                <Facebook className="w-6 h-6" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white">
-                <Instagram className="w-6 h-6" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white">
-                <Youtube className="w-6 h-6" />
-              </a>
             </div>
           </div>
         </div>
